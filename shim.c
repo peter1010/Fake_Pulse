@@ -39,21 +39,36 @@ void * dlopen(const char * filename, int flags)
     return handle;
 }
 
+int pa_dummy()
+{
+    DEBUG_MSG("pa_dummy called\n");
+    return 0;
+}
 
 void * dlsym(void * handle, const char * symbol)
 {
+    int pa = 0;
+    void * address = NULL;
     static void * (*the_real_one)(void * handle, const char *symbol) = NULL;
 
     if(handle == MAGIC_HND) {
         DEBUG_MSG("dlsym called for %s", symbol);
         handle = (void *)RTLD_DEFAULT;
+        pa = 1;
     }
 
     if(the_real_one == NULL) {
 //        the_real_one = __libc_dlsym(RTLD_NEXT, "dlsym");
         the_real_one = _dl_sym(RTLD_NEXT, "dlsym", dlsym);
     }
-    return the_real_one(handle, symbol);
+    address = the_real_one(handle, symbol);
+    if(address == NULL) {
+        DEBUG_MSG("No symbole %s found", symbol);
+        if(pa) {
+            return pa_dummy;
+        }
+    }
+    return address;
 }
 
 int dlclose(void * handle)

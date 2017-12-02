@@ -7,7 +7,7 @@
 CFLAGS=-fpic -Wall -O3 -Wextra
 CXXFLAGS=$(CFLAGS)
 
-CPPFLAGS= -I$(SRCDIR)/../common -DDEBUG
+CPPFLAGS= -I$(SRCDIR)/../common -I/usr/include/pulse -DDEBUG
 
 RM=rm -f
 CC=gcc
