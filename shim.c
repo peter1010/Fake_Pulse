@@ -19,7 +19,7 @@
 extern void * __libc_dlsym(void * handle, const char * symbol);
 extern void * _dl_sym(void * handle, const char * symbol, void * callee);
 
-void * libHandle = NULL;
+void * libPulseHandle = NULL;
 
 #define MAGIC_HND (void *)(0x1865FE45)
 /**
@@ -28,13 +28,12 @@ void * libHandle = NULL;
  */
 void * dlopen(const char * filename, int flags)
 {
-    void * handle;
+    void * handle = dlmopen(LM_ID_BASE, filename, flags);
 
     if(filename && (strncmp("libpulse.so", filename, 11) == 0)) {
         DEBUG_MSG("dlopen called for %s", filename);
+        libPulseHandle = handle;
         handle = MAGIC_HND;
-    } else {
-        handle = dlmopen(LM_ID_BASE, filename, flags);
     }
     return handle;
 }
@@ -47,28 +46,37 @@ int pa_dummy()
 
 void * dlsym(void * handle, const char * symbol)
 {
-    int pa = 0;
     void * address = NULL;
     static void * (*the_real_one)(void * handle, const char *symbol) = NULL;
-
-    if(handle == MAGIC_HND) {
-        DEBUG_MSG("dlsym called for %s", symbol);
-        handle = (void *)RTLD_DEFAULT;
-        pa = 1;
-    }
 
     if(the_real_one == NULL) {
 //        the_real_one = __libc_dlsym(RTLD_NEXT, "dlsym");
         the_real_one = _dl_sym(RTLD_NEXT, "dlsym", dlsym);
     }
-    address = the_real_one(handle, symbol);
-    if(address == NULL) {
-        DEBUG_MSG("No symbole %s found", symbol);
-        if(pa) {
-            return pa_dummy;
+
+
+    if(handle == MAGIC_HND) {
+        address = the_real_one(libPulseHandle, symbol);
+        DEBUG_MSG("dlsym called for %s = %p", symbol, address);
+        if(address) {
+            char buf[100];
+            strcpy(buf, symbol);
+            buf[0] = 'z';
+            buf[1] = 'z';
+            void ** address2 = the_real_one(RTLD_DEFAULT, buf);
+            if(address2) {
+                *address2 = address;
+            }
         }
+        address = the_real_one(RTLD_DEFAULT, symbol);
+        if(address == NULL) {
+            address = pa_dummy;
+        }
+    } else {
+        address = the_real_one(handle, symbol);
     }
     return address;
+
 }
 
 int dlclose(void * handle)
@@ -77,7 +85,7 @@ int dlclose(void * handle)
 
     if(handle == MAGIC_HND) {
         DEBUG_MSG("dlclose called");
-        return 0;
+        handle = libPulseHandle;
     } 
     if(the_real_one == NULL) {
         the_real_one = dlsym(RTLD_NEXT, "dlclose");
