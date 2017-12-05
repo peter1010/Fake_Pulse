@@ -8,6 +8,8 @@
 #ifndef _LOGGING_H_
 #define _LOGGING_H_
 
+#include "pulseaudio.h"
+
 /**
  * Some Logging code
  */
@@ -19,4 +21,11 @@ extern void log_msg(const char * fmt, ...) __attribute__((format (printf, 1, 2))
 
 extern void log_errno(const char * msg);
 
+extern void log_server_info(const pa_server_info * info);
+
+extern void log_sink_info(const pa_sink_info * info);
+
+extern const char * context_state2str(pa_context_state_t state);
+
+const char * operation_state2str(pa_operation_state_t state);
 #endif
