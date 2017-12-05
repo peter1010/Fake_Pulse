@@ -28,4 +28,6 @@ extern void log_sink_info(const pa_sink_info * info);
 extern const char * context_state2str(pa_context_state_t state);
 
 const char * operation_state2str(pa_operation_state_t state);
+
+const char * subscription_mask2str(pa_subscription_mask_t m);
 #endif

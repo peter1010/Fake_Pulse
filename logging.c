@@ -205,7 +205,7 @@ const char * operation_state2str(pa_operation_state_t state)
     return str;
 }
 
-const char * subscrition_mask2str(pa_subscription_mask_t m)
+const char * subscription_mask2str(pa_subscription_mask_t m)
 {
     static char buf[100];
     buf[0] = 0;

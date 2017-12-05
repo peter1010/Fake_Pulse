@@ -9,6 +9,7 @@
 #include "pulseaudio.h"
 #include "defs.h"
 #include "originals.h"
+#include "my_threaded_mainloop.h"
 
 #define _UNUSED __attribute__((unused))
 
@@ -20,10 +21,6 @@ void * subscribe_data = 0;
 
 pa_operation * op;
 
-int s_mainloop = 1;
-pa_threaded_mainloop * mainloop = (pa_threaded_mainloop *) &s_mainloop;
-
-pa_mainloop_api mainloop_api = {0};
 
 int s_context =  2;
 pa_context * context = (pa_context *) &s_context;
@@ -33,6 +30,7 @@ void init_symbols(void);
 #define GET_ORIGINAL(name) FP_##name orig = zz_##name
 #define ListenMode 1
 
+/*----------------------------------------------------------------------------*/
 const char * pa_get_library_version(void)
 {
     const char * retVal;
@@ -46,19 +44,21 @@ const char * pa_get_library_version(void)
     return retVal;
 }
 
-int pa_channel_map_can_balance(const pa_channel_map * p _UNUSED)
+/*----------------------------------------------------------------------------*/
+int pa_channel_map_can_balance(const pa_channel_map * p)
 {
     int retVal;
     if(ListenMode) {
         GET_ORIGINAL(channel_map_can_balance);
         retVal = orig(p);
     } else {
-        retVal = 0;
+        retVal = 0;  /* Means no balance */
     }
     DEBUG_MSG("%s returned %i", __func__, retVal);
     return retVal;
 }
 
+/*----------------------------------------------------------------------------*/
 pa_channel_map * pa_channel_map_init(pa_channel_map * p)
 {
     pa_channel_map * retVal;
@@ -67,6 +67,7 @@ pa_channel_map * pa_channel_map_init(pa_channel_map * p)
         GET_ORIGINAL(channel_map_init);
         retVal = orig(p);
     } else {
+        /* Lets always have simple stereo */
         retVal = p;
         p->channels = 2;
         p->map[0] = PA_CHANNEL_POSITION_FRONT_LEFT;
@@ -76,7 +77,7 @@ pa_channel_map * pa_channel_map_init(pa_channel_map * p)
 }
 
 /*----------------------------------------------------------------------------*/
-
+// FIXME
 int pa_context_connect(pa_context * c, const char * server,
         pa_context_flags_t flags, const pa_spawn_api * api)
 {
@@ -123,12 +124,14 @@ int pa_context_connect(pa_context * c, const char * server,
 }
 
 /*----------------------------------------------------------------------------*/
-
+// FIXME
 void pa_context_disconnect(pa_context * c _UNUSED)
 {
     DEBUG_MSG("TODO %s called ", __func__);
 }
 
+/*----------------------------------------------------------------------------*/
+// FIXME
 pa_operation * pa_context_drain(pa_context * c _UNUSED, pa_context_notify_cb_t cb _UNUSED, void * userdata _UNUSED)
 {
     DEBUG_MSG("TODO %s called ", __func__);
@@ -744,11 +747,19 @@ pa_volume_t pa_sw_volume_from_linear(double v)
     return retVal;
 }
 
-void pa_threaded_mainloop_free(pa_threaded_mainloop* m _UNUSED)
+/*----------------------------------------------------------------------------*/
+void pa_threaded_mainloop_free(pa_threaded_mainloop* m)
 {
-    DEBUG_MSG("TODO %s called ", __func__);
+    DEBUG_MSG("%s called ", __func__);
+    if(ListenMode) {
+        GET_ORIGINAL(threaded_mainloop_free);
+        orig(m);
+    } else {
+        my_threaded_mainloop_free(m);
+    }
 }
 
+/*----------------------------------------------------------------------------*/
 pa_mainloop_api * pa_threaded_mainloop_get_api(pa_threaded_mainloop * m)
 {
     pa_mainloop_api * api;
@@ -757,7 +768,7 @@ pa_mainloop_api * pa_threaded_mainloop_get_api(pa_threaded_mainloop * m)
         GET_ORIGINAL(threaded_mainloop_get_api);
         api = orig(m);
     } else {
-        api = &mainloop_api;
+        api = my_threaded_mainloop_get_api(m);
     }
     return api;
 }
@@ -782,6 +793,7 @@ void pa_threaded_mainloop_lock(pa_threaded_mainloop * m)
     }
 }
 
+/*----------------------------------------------------------------------------*/
 pa_threaded_mainloop * pa_threaded_mainloop_new(void)
 {
     pa_threaded_mainloop * retVal;
@@ -790,7 +802,7 @@ pa_threaded_mainloop * pa_threaded_mainloop_new(void)
         GET_ORIGINAL(threaded_mainloop_new);
         retVal = orig();
     } else {
-        retVal = mainloop;
+        retVal = my_threaded_mainloop_new();
     }
     return retVal;
 }
@@ -801,9 +813,12 @@ void pa_threaded_mainloop_signal(pa_threaded_mainloop * m, int wait_for_accept)
     if(ListenMode) {
         GET_ORIGINAL(threaded_mainloop_signal);
         orig(m, wait_for_accept);
+    } else {
+        // FIXME
     }
 }
 
+/*----------------------------------------------------------------------------*/
 int pa_threaded_mainloop_start(pa_threaded_mainloop * m)
 {
     int retVal;
@@ -811,18 +826,21 @@ int pa_threaded_mainloop_start(pa_threaded_mainloop * m)
         GET_ORIGINAL(threaded_mainloop_start);
         retVal = orig(m);
     } else {
-        retVal = PA_OK;
+        retVal = my_threaded_mainloop_start(m);
     }
     DEBUG_MSG("%s returned %i ", __func__, retVal);
     return retVal;
 }
 
-void pa_threaded_mainloop_stop(pa_threaded_mainloop *m _UNUSED)
+/*----------------------------------------------------------------------------*/
+void pa_threaded_mainloop_stop(pa_threaded_mainloop *m)
 {
     DEBUG_MSG("%s called ", __func__);
     if(ListenMode) {
         GET_ORIGINAL(threaded_mainloop_stop);
         orig(m);
+    } else {
+        my_threaded_mainloop_stop(m);
     }
 }
 
@@ -832,6 +850,8 @@ void pa_threaded_mainloop_unlock(pa_threaded_mainloop *m _UNUSED)
     if(ListenMode) {
         GET_ORIGINAL(threaded_mainloop_unlock);
         orig(m);
+    } else {
+        // FIXME
     }
 }
 
@@ -913,7 +933,7 @@ pa_operation * pa_context_subscribe(pa_context * c _UNUSED,
         pa_subscription_mask_t m _UNUSED, pa_context_success_cb_t cb _UNUSED, void *userdata _UNUSED)
 {
     DEBUG_MSG("%s called ", __func__);
-    DEBUG_MSG("%s", subscrition_mask2str(m));
+    DEBUG_MSG("%s", subscription_mask2str(m));
 //    if(cb) {
 //        cb(c, m, userdata);
 //    }

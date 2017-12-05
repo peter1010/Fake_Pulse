@@ -16,7 +16,7 @@ MAKEDEPEND=gcc -M $(CPPFLAGS)
 LD=gcc
 #-lstdc++
 
-OBJS= shim.o pulse.o logging.o originals.o
+OBJS= shim.o pulse.o logging.o originals.o my_threaded_mainloop.o
 
 .PHONY: all
 all: fake_pulse.so
