@@ -5,7 +5,9 @@
  * Licensed under the GPL License. See LICENSE file in the project root for full license information.  
  */
 
+#ifndef _GNU_SOURCE
 #define _GNU_SOURCE
+#endif
 
 #include <stdio.h>
 #include <dlfcn.h>
@@ -16,8 +18,8 @@
 #include "originals.h"
 
 
-extern void * __libc_dlsym(void * handle, const char * symbol);
-extern void * _dl_sym(void * handle, const char * symbol, void * callee);
+extern "C" void * __libc_dlsym(void * handle, const char * symbol);
+extern "C" void * _dl_sym(void * handle, const char * symbol, void * callee);
 
 void * libPulseHandle = NULL;
 
@@ -32,7 +34,7 @@ void * dlopen(const char * filename, int flags)
     static void * (*the_real_dlopen)(const char * filename, int flags) = NULL;
 
     if(the_real_dlopen == NULL) {
-        the_real_dlopen = dlsym(RTLD_NEXT, "dlopen");
+        the_real_dlopen = reinterpret_cast<void *(*)(const char *, int)>(dlsym(RTLD_NEXT, "dlopen"));
         if(the_real_dlopen == NULL) {
             DEBUG_MSG("Failed to find dlopen()");
             return NULL;
@@ -65,7 +67,8 @@ void * dlsym(void * handle, const char * symbol)
     static void * (*the_real_dlsym)(void * handle, const char *symbol) = NULL;
 
     if(the_real_dlsym == NULL) {
-        the_real_dlsym = _dl_sym(RTLD_NEXT, "dlsym", dlsym);
+        the_real_dlsym = reinterpret_cast<void *(*)(void *, const char *)>(
+                    _dl_sym(RTLD_NEXT, "dlsym", reinterpret_cast<void *>(dlsym)));
         if(the_real_dlsym == NULL) {
             DEBUG_MSG("Failed to find dlsym()");
             return NULL;
@@ -74,7 +77,7 @@ void * dlsym(void * handle, const char * symbol)
 
     if(strcmp(symbol, "dlsym") == 0) {
         // Avoid recursive call
-        address = dlsym;
+        address = reinterpret_cast<void *>(dlsym);
 
     } else if(handle == MAGIC_HND) {
         // Symbol from libpulse?
@@ -87,7 +90,7 @@ void * dlsym(void * handle, const char * symbol)
             strcpy(buf, symbol);
             buf[0] = 'z';
             buf[1] = 'z';
-            void ** pSaveAddress = the_real_dlsym(RTLD_DEFAULT, buf);
+            void ** pSaveAddress = reinterpret_cast<void **>(the_real_dlsym(RTLD_DEFAULT, buf));
             if(pSaveAddress) {
                 *pSaveAddress = address;
             } else {
@@ -96,7 +99,7 @@ void * dlsym(void * handle, const char * symbol)
         }
         address = the_real_dlsym(RTLD_DEFAULT, symbol);
         if(address == NULL) {
-            address = pa_dummy;
+            address = reinterpret_cast<void *>(pa_dummy);
             DEBUG_MSG("WARNING: Shim function  %s missing", symbol);
         }
     } else {
@@ -114,7 +117,7 @@ int dlclose(void * handle)
     static int (*the_real_dlclose)(void * handle) = NULL;
     
     if(the_real_dlclose == NULL) {
-        the_real_dlclose = dlsym(RTLD_NEXT, "dlclose");
+        the_real_dlclose = reinterpret_cast<int(*)(void *)>(dlsym(RTLD_NEXT, "dlclose"));
         if(the_real_dlclose == NULL) {
             DEBUG_MSG("Failed to find dlclose()");
             return 0;

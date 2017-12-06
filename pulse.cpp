@@ -9,7 +9,7 @@
 #include "pulseaudio.h"
 #include "defs.h"
 #include "originals.h"
-#include "my_threaded_mainloop.h"
+#include "threaded_mainloop.hpp"
 
 #define _UNUSED __attribute__((unused))
 
@@ -173,8 +173,8 @@ pa_operation * pa_context_get_server_info(pa_context *c _UNUSED, pa_server_info_
         info.default_source_name = "source";
         info.cookie = 3;                    /**< A random cookie for identifying this instance of PulseAudio. */
         info.channel_map.channels =2;
-        info.channel_map.map[0] = 1;         /**< Default channel map. \since 0.9.15 */
-        info.channel_map.map[1] = 2;
+        info.channel_map.map[0] = PA_CHANNEL_POSITION_FRONT_LEFT;
+        info.channel_map.map[1] = PA_CHANNEL_POSITION_FRONT_RIGHT;
         if(cb) {
             cb(c, &info, userdata);
         }
@@ -217,8 +217,8 @@ pa_operation * pa_context_get_sink_info_by_name(pa_context * c,
         info.sample_spec.rate = 44100;
         info.sample_spec.channels = 2;
         info.channel_map.channels =2;
-        info.channel_map.map[0] = 1;
-        info.channel_map.map[1] = 2;
+        info.channel_map.map[0] = PA_CHANNEL_POSITION_FRONT_LEFT;
+        info.channel_map.map[1] = PA_CHANNEL_POSITION_FRONT_RIGHT;
         info.owner_module = 1;
         info.volume.channels = 2;
         info.volume.values[0] = 100;
@@ -424,7 +424,7 @@ pa_operation_state_t pa_operation_get_state(pa_operation *o)
         GET_ORIGINAL(operation_get_state);
         retVal = orig(o);
     } else {
-        retVal = 0;
+        retVal = PA_OPERATION_RUNNING;
     }
     DEBUG_MSG("%s returned %s", __func__, operation_state2str(retVal));
     return retVal;
@@ -773,6 +773,7 @@ pa_mainloop_api * pa_threaded_mainloop_get_api(pa_threaded_mainloop * m)
     return api;
 }
 
+/*----------------------------------------------------------------------------*/
 int pa_threaded_mainloop_in_thread(pa_threaded_mainloop * m)
 {
     int retVal;
@@ -780,16 +781,21 @@ int pa_threaded_mainloop_in_thread(pa_threaded_mainloop * m)
     if(ListenMode) {
         GET_ORIGINAL(threaded_mainloop_in_thread);
         retVal = orig(m);
+    } else {
+        retVal = my_threaded_mainloop_in_thread(m);
     }
     return retVal;
 }
 
+/*----------------------------------------------------------------------------*/
 void pa_threaded_mainloop_lock(pa_threaded_mainloop * m)
 {
 //    DEBUG_MSG("%s called ", __func__);
     if(ListenMode) {
         GET_ORIGINAL(threaded_mainloop_lock);
         orig(m);
+    } else {
+        my_threaded_mainloop_lock(m);
     }
 }
 
@@ -807,6 +813,7 @@ pa_threaded_mainloop * pa_threaded_mainloop_new(void)
     return retVal;
 }
 
+/*----------------------------------------------------------------------------*/
 void pa_threaded_mainloop_signal(pa_threaded_mainloop * m, int wait_for_accept)
 {
     DEBUG_MSG("%s(%i) called ", __func__, wait_for_accept);
@@ -844,6 +851,7 @@ void pa_threaded_mainloop_stop(pa_threaded_mainloop *m)
     }
 }
 
+/*----------------------------------------------------------------------------*/
 void pa_threaded_mainloop_unlock(pa_threaded_mainloop *m _UNUSED)
 {
 //    DEBUG_MSG("%s called ", __func__);
@@ -851,10 +859,11 @@ void pa_threaded_mainloop_unlock(pa_threaded_mainloop *m _UNUSED)
         GET_ORIGINAL(threaded_mainloop_unlock);
         orig(m);
     } else {
-        // FIXME
+        my_threaded_mainloop_unlock(m);
     }
 }
 
+/*----------------------------------------------------------------------------*/
 void pa_threaded_mainloop_wait(pa_threaded_mainloop * m _UNUSED)
 {
     DEBUG_MSG("%s called ", __func__);
@@ -862,6 +871,7 @@ void pa_threaded_mainloop_wait(pa_threaded_mainloop * m _UNUSED)
         GET_ORIGINAL(threaded_mainloop_wait);
         orig(m);
     }
+    // FIXME
 }
 
 size_t pa_usec_to_bytes(pa_usec_t t _UNUSED, const pa_sample_spec *spec _UNUSED)

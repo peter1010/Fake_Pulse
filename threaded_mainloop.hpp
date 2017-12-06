@@ -20,5 +20,10 @@ extern void my_threaded_mainloop_free(pa_threaded_mainloop* m);
     
 extern pa_mainloop_api * my_threaded_mainloop_get_api(pa_threaded_mainloop * m);
 
+extern int my_threaded_mainloop_in_thread(pa_threaded_mainloop * m);
+
+extern void my_threaded_mainloop_lock(pa_threaded_mainloop * m);
+
+extern void my_threaded_mainloop_unlock(pa_threaded_mainloop * m);
 #endif
 

@@ -5,7 +5,13 @@
  * Licensed under the GPL License. See LICENSE file in the project root for full license information.  
  */
 
+/* Compile as a C-file so names are not mangled! */
+
 #include "defs.h"
+
+#ifdef __cplusplus
+#   error MUST BE COMPILED AS A C-FILE
+#endif
 
 #define DEFINE_FP(name) FP_##name zz_##name = NULL
 

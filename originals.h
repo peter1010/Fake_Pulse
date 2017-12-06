@@ -1,3 +1,6 @@
+#ifndef _ORIGINALS_H_
+#define _ORIGINALS_H_
+
 /**
  *
  * Copyright (c) 2017 Peter Leese
@@ -8,6 +11,10 @@
 #include "defs.h"
 
 #define DECLARE_FP(name) extern FP_##name zz_##name;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 DECLARE_FP(get_library_version);
 DECLARE_FP(channel_map_can_balance);
@@ -73,4 +80,10 @@ DECLARE_FP(stream_get_device_name);
 DECLARE_FP(context_set_subscribe_callback);
 DECLARE_FP(context_subscribe);
 DECLARE_FP(mainloop_api_once);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif
 

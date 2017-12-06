@@ -1,3 +1,6 @@
+#ifndef _DEFS_H_
+#define _DEFS_H_
+
 /**
  *
  * Copyright (c) 2017 Peter Leese
@@ -71,4 +74,5 @@ typedef const char * (*FP_stream_get_device_name)(pa_stream *);
 typedef void (*FP_context_set_subscribe_callback)(pa_context *, pa_context_subscribe_cb_t, void *);
 typedef pa_operation * (*FP_context_subscribe)(pa_context *, pa_subscription_mask_t, pa_context_success_cb_t, void *);
 typedef void (*FP_mainloop_api_once)(pa_mainloop_api *, void (*callback)(pa_mainloop_api*, void *), void *);
- 
+
+#endif
