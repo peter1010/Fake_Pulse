@@ -9,21 +9,18 @@
 #include "pulseaudio.h"
 #include "defs.h"
 #include "originals.h"
+
 #include "threaded_mainloop.hpp"
+#include "context.hpp"
 
 #define _UNUSED __attribute__((unused))
 
 pa_context_notify_cb_t context_state_cb_func = NULL;
-void * context_state_cb_data = NULL;
  
 pa_context_subscribe_cb_t subscribe_cb = NULL;
 void * subscribe_data = 0;
 
 pa_operation * op;
-
-
-int s_context =  2;
-pa_context * context = (pa_context *) &s_context;
 
 void init_symbols(void);
 
@@ -77,7 +74,6 @@ pa_channel_map * pa_channel_map_init(pa_channel_map * p)
 }
 
 /*----------------------------------------------------------------------------*/
-// FIXME
 int pa_context_connect(pa_context * c, const char * server,
         pa_context_flags_t flags, const pa_spawn_api * api)
 {
@@ -99,25 +95,7 @@ int pa_context_connect(pa_context * c, const char * server,
         GET_ORIGINAL(context_connect);
         retVal = orig(c, server, flags, api);
     } else {
-        if(api) {
-            if(api->prefork) {
-                DEBUG_MSG("Calling prefork");
-                api->prefork();
-            }
-            if(api->atfork) {
-                DEBUG_MSG("Calling atfork");
-                api->atfork();
-            }
-            if(api->postfork) {
-                DEBUG_MSG("Calling postfork");
-                api->postfork();
-            }
-        }
-        if(context_state_cb_func) {
-            DEBUG_MSG("Calling set context state callback");
-            context_state_cb_func(c, context_state_cb_data);
-        }
-        retVal = 0;
+        retVal = reinterpret_cast<CContext *>(c)->connect(server, flags, api);
     }
     DEBUG_MSG("%s returned %i", __func__, retVal);
     return retVal;
@@ -149,7 +127,7 @@ static void context_get_server_info_cb(pa_context *c, const pa_server_info * inf
     context_get_server_info_cb_func(c, info, userdata);
 }
 
-pa_operation * pa_context_get_server_info(pa_context *c _UNUSED, pa_server_info_cb_t cb _UNUSED, void *userdata _UNUSED)
+pa_operation * pa_context_get_server_info(pa_context *c, pa_server_info_cb_t cb, void *userdata)
 {
     pa_operation * retVal;
     DEBUG_MSG("%s called ", __func__);
@@ -158,27 +136,7 @@ pa_operation * pa_context_get_server_info(pa_context *c _UNUSED, pa_server_info_
         GET_ORIGINAL(context_get_server_info);
         retVal = orig(c, cb ? context_get_server_info_cb : cb, userdata);
     } else {
-        static pa_server_info info;
-
-        info.user_name = "bob";
-        info.host_name = "cobblers";              /**< Host name the daemon is running on */
-        info.server_version = "11.1.0";         /**< Version string of the daemon */
-        info.server_name = "pulseaudio";
-
-        info.sample_spec.format = PA_SAMPLE_S16LE;
-        info.sample_spec.rate = 44100;
-        info.sample_spec.channels = 2;
-
-        info.default_sink_name = "sink";
-        info.default_source_name = "source";
-        info.cookie = 3;                    /**< A random cookie for identifying this instance of PulseAudio. */
-        info.channel_map.channels =2;
-        info.channel_map.map[0] = PA_CHANNEL_POSITION_FRONT_LEFT;
-        info.channel_map.map[1] = PA_CHANNEL_POSITION_FRONT_RIGHT;
-        if(cb) {
-            cb(c, &info, userdata);
-        }
-        retVal = op;
+        retVal = reinterpret_cast<CContext *>(c)->get_server_info(cb, userdata);
     }
     return retVal;
 
@@ -205,52 +163,12 @@ pa_operation * pa_context_get_sink_info_by_name(pa_context * c,
         GET_ORIGINAL(context_get_sink_info_by_name);
         retVal = orig(c, name, cb ? context_get_sink_info_cb : cb, userdata);
     } else {
- 
-        static pa_sink_info info;
-        static pa_format_info format = {PA_ENCODING_PCM, NULL};
-        static pa_format_info * formats[1] = {&format};
-
-        info.name = name;
-        info.index = 1;
-        info.description = "output";
-        info.sample_spec.format = PA_SAMPLE_S16LE;
-        info.sample_spec.rate = 44100;
-        info.sample_spec.channels = 2;
-        info.channel_map.channels =2;
-        info.channel_map.map[0] = PA_CHANNEL_POSITION_FRONT_LEFT;
-        info.channel_map.map[1] = PA_CHANNEL_POSITION_FRONT_RIGHT;
-        info.owner_module = 1;
-        info.volume.channels = 2;
-        info.volume.values[0] = 100;
-        info.volume.values[1] = 100;
-        info.mute = 0;
-        info.monitor_source = 0;
-        info.monitor_source_name = "";
-        info.latency = 1000;
-        info.driver = "alsa";
-        info.flags = PA_SINK_HARDWARE;
-        info.proplist = NULL;
-        info.configured_latency = 1000;
-        info.base_volume = 50;
-        info.state = PA_SINK_IDLE;
-        info.n_volume_steps = 1;
-        info.card =  1;
-        info.n_ports = 0; 
-        info.ports = NULL;
-        info.active_port = NULL;
-        info.n_formats = 1;
-        info.formats = formats;
-
-
-        if(cb) {
-            cb(c, &info, 0, userdata);
-            cb(c, NULL, 1, userdata);
-        }
-        retVal = op;
+        retVal = reinterpret_cast<CContext *>(c)->get_sink_info_by_name(name, cb, userdata);
     }
     return retVal;
 }
 
+/*----------------------------------------------------------------------------*/
 
 pa_operation * pa_context_get_sink_info_list(pa_context * c _UNUSED,
         pa_sink_info_cb_t cb _UNUSED, void * userdata _UNUSED)
@@ -259,12 +177,16 @@ pa_operation * pa_context_get_sink_info_list(pa_context * c _UNUSED,
     return NULL;
 }
 
+/*----------------------------------------------------------------------------*/
+
 pa_operation * pa_context_get_sink_input_info(pa_context * c _UNUSED,
         uint32_t idx _UNUSED, pa_sink_input_info_cb_t cb _UNUSED, void *userdata _UNUSED)
 {
     DEBUG_MSG("TODO %s(%i) called ", __func__, idx);
     return NULL;
 }
+
+/*----------------------------------------------------------------------------*/
 
 pa_operation * pa_context_get_source_info_list(pa_context *ci _UNUSED,
         pa_source_info_cb_t cb _UNUSED, void * userdata _UNUSED)
@@ -273,6 +195,8 @@ pa_operation * pa_context_get_source_info_list(pa_context *ci _UNUSED,
     return NULL;
 }
 
+/*----------------------------------------------------------------------------*/
+
 pa_context_state_t pa_context_get_state(pa_context * c)
 {
     pa_context_state_t retVal;
@@ -280,11 +204,13 @@ pa_context_state_t pa_context_get_state(pa_context * c)
         GET_ORIGINAL(context_get_state);
         retVal = orig(c);
     } else {
-        retVal = PA_CONTEXT_READY;
+        retVal = reinterpret_cast<CContext *>(c)->get_state();
     }
     DEBUG_MSG("%s returned %s", __func__, context_state2str(retVal));
     return retVal;
 }
+
+/*----------------------------------------------------------------------------*/
 
 pa_context * pa_context_new(pa_mainloop_api * mainloop, const char * name)
 {
@@ -294,7 +220,7 @@ pa_context * pa_context_new(pa_mainloop_api * mainloop, const char * name)
         GET_ORIGINAL(context_new);
         c = orig(mainloop, name);
     } else {
-        c = context;
+        c = reinterpret_cast<pa_context *>(new CContext(mainloop, name));
     }
     return c;
 }
@@ -321,6 +247,7 @@ pa_time_event * pa_context_rttime_new(pa_context * c,
         GET_ORIGINAL(context_rttime_new);
         retVal = orig(c, usec, cb ? time_event_cb : cb, userdata);
     }
+    // FIXME
     return retVal;
 }
 
@@ -346,6 +273,7 @@ pa_operation * pa_context_set_sink_input_volume(pa_context * c,
         GET_ORIGINAL(context_set_sink_input_volume);
         retVal = orig(c, idx, volume, cb ? context_sink_input_volume_cb : cb, userdata);
     }
+    // FIXME
     return retVal;
 }
 
@@ -363,11 +291,12 @@ void pa_context_set_state_callback(pa_context * c, pa_context_notify_cb_t cb, vo
 {
     DEBUG_MSG("%s called ", __func__);
     context_state_cb_func = cb;
-    context_state_cb_data = userdata;
 
     if(ListenMode) {
         GET_ORIGINAL(context_set_state_callback);
         orig(c, cb ? context_state_cb : cb, userdata);
+    } else {
+        reinterpret_cast<CContext *>(c)->set_state_callback(cb, userdata);
     }
 }
 
@@ -379,6 +308,8 @@ void pa_context_unref(pa_context * c)
     if(ListenMode) {
         GET_ORIGINAL(context_unref);
         orig(c);
+    } else {
+        CContext::unref(reinterpret_cast<CContext *>(c));
     }
 }
 
@@ -392,6 +323,7 @@ pa_cvolume * pa_cvolume_set(pa_cvolume * a, unsigned channels, pa_volume_t v)
         GET_ORIGINAL(cvolume_set);
         retVal = orig(a, channels, v);
     }
+    // FIXME
     return retVal;
 }
 
@@ -412,6 +344,7 @@ size_t pa_frame_size(const pa_sample_spec * spec)
         GET_ORIGINAL(frame_size);
         retVal = orig(spec);
     }
+    // FIXME
 //    DEBUG_MSG("%s returned %lu ", __func__, retVal);
     return retVal;
 }
@@ -424,6 +357,7 @@ pa_operation_state_t pa_operation_get_state(pa_operation *o)
         GET_ORIGINAL(operation_get_state);
         retVal = orig(o);
     } else {
+        // FIXME
         retVal = PA_OPERATION_RUNNING;
     }
     DEBUG_MSG("%s returned %s", __func__, operation_state2str(retVal));
@@ -439,6 +373,7 @@ void pa_operation_unref(pa_operation *o)
         GET_ORIGINAL(operation_unref);
         orig(o);
     }
+    // FIXME
 }
 
 /*----------------------------------------------------------------------------*/
@@ -617,6 +552,7 @@ pa_stream * pa_stream_new(pa_context * c, const char * name, const pa_sample_spe
         GET_ORIGINAL(stream_new);
         retVal = orig(c, name, ss, map);
     } else {
+        // FIXME
         retVal = NULL;
     }
     return retVal;
@@ -651,6 +587,7 @@ void pa_stream_set_state_callback(pa_stream * s _UNUSED, pa_stream_notify_cb_t c
         GET_ORIGINAL(stream_set_state_callback);
         orig(s, cb ? stream_state_cb : cb, userdata);
     }
+    // FIXME
 }
 
 /*----------------------------------------------------------------------------*/
@@ -674,6 +611,7 @@ void pa_stream_set_write_callback(pa_stream * p _UNUSED, pa_stream_request_cb_t 
         GET_ORIGINAL(stream_set_write_callback);
         orig(p, cb ? stream_write_cb : cb, userdata);
     }
+    // FIXME
 }
 
 /*----------------------------------------------------------------------------*/
@@ -685,6 +623,7 @@ void pa_stream_unref(pa_stream * s _UNUSED)
         GET_ORIGINAL(stream_unref);
         orig(s);
     }
+    // FIXME
 }
 
 /*----------------------------------------------------------------------------*/
@@ -744,6 +683,7 @@ pa_volume_t pa_sw_volume_from_linear(double v)
         GET_ORIGINAL(sw_volume_from_linear);
         retVal = orig(v);
     }
+    // FIXME
     return retVal;
 }
 
@@ -755,7 +695,7 @@ void pa_threaded_mainloop_free(pa_threaded_mainloop* m)
         GET_ORIGINAL(threaded_mainloop_free);
         orig(m);
     } else {
-        my_threaded_mainloop_free(m);
+        delete reinterpret_cast<CThreadedMainloop *>(m);
     }
 }
 
@@ -768,7 +708,7 @@ pa_mainloop_api * pa_threaded_mainloop_get_api(pa_threaded_mainloop * m)
         GET_ORIGINAL(threaded_mainloop_get_api);
         api = orig(m);
     } else {
-        api = my_threaded_mainloop_get_api(m);
+        api = reinterpret_cast<CThreadedMainloop *>(m)->get_api();
     }
     return api;
 }
@@ -782,7 +722,7 @@ int pa_threaded_mainloop_in_thread(pa_threaded_mainloop * m)
         GET_ORIGINAL(threaded_mainloop_in_thread);
         retVal = orig(m);
     } else {
-        retVal = my_threaded_mainloop_in_thread(m);
+        retVal = reinterpret_cast<CThreadedMainloop *>(m)->in_thread();
     }
     return retVal;
 }
@@ -795,7 +735,7 @@ void pa_threaded_mainloop_lock(pa_threaded_mainloop * m)
         GET_ORIGINAL(threaded_mainloop_lock);
         orig(m);
     } else {
-        my_threaded_mainloop_lock(m);
+        reinterpret_cast<CThreadedMainloop *>(m)->lock();
     }
 }
 
@@ -808,7 +748,7 @@ pa_threaded_mainloop * pa_threaded_mainloop_new(void)
         GET_ORIGINAL(threaded_mainloop_new);
         retVal = orig();
     } else {
-        retVal = my_threaded_mainloop_new();
+        retVal = reinterpret_cast<pa_threaded_mainloop *>(new CThreadedMainloop());
     }
     return retVal;
 }
@@ -821,7 +761,7 @@ void pa_threaded_mainloop_signal(pa_threaded_mainloop * m, int wait_for_accept)
         GET_ORIGINAL(threaded_mainloop_signal);
         orig(m, wait_for_accept);
     } else {
-        // FIXME
+        reinterpret_cast<CThreadedMainloop *>(m)->signal(wait_for_accept);
     }
 }
 
@@ -833,7 +773,7 @@ int pa_threaded_mainloop_start(pa_threaded_mainloop * m)
         GET_ORIGINAL(threaded_mainloop_start);
         retVal = orig(m);
     } else {
-        retVal = my_threaded_mainloop_start(m);
+        retVal = reinterpret_cast<CThreadedMainloop *>(m)->start();
     }
     DEBUG_MSG("%s returned %i ", __func__, retVal);
     return retVal;
@@ -847,33 +787,35 @@ void pa_threaded_mainloop_stop(pa_threaded_mainloop *m)
         GET_ORIGINAL(threaded_mainloop_stop);
         orig(m);
     } else {
-        my_threaded_mainloop_stop(m);
+        reinterpret_cast<CThreadedMainloop *>(m)->stop();
     }
 }
 
 /*----------------------------------------------------------------------------*/
-void pa_threaded_mainloop_unlock(pa_threaded_mainloop *m _UNUSED)
+void pa_threaded_mainloop_unlock(pa_threaded_mainloop *m)
 {
 //    DEBUG_MSG("%s called ", __func__);
     if(ListenMode) {
         GET_ORIGINAL(threaded_mainloop_unlock);
         orig(m);
     } else {
-        my_threaded_mainloop_unlock(m);
+        reinterpret_cast<CThreadedMainloop *>(m)->unlock();
     }
 }
 
 /*----------------------------------------------------------------------------*/
-void pa_threaded_mainloop_wait(pa_threaded_mainloop * m _UNUSED)
+void pa_threaded_mainloop_wait(pa_threaded_mainloop * m)
 {
     DEBUG_MSG("%s called ", __func__);
     if(ListenMode) {
         GET_ORIGINAL(threaded_mainloop_wait);
         orig(m);
+    } else {
+        reinterpret_cast<CThreadedMainloop *>(m)->wait();
     }
-    // FIXME
 }
 
+/*----------------------------------------------------------------------------*/
 size_t pa_usec_to_bytes(pa_usec_t t _UNUSED, const pa_sample_spec *spec _UNUSED)
 {
     size_t retVal;
@@ -881,6 +823,7 @@ size_t pa_usec_to_bytes(pa_usec_t t _UNUSED, const pa_sample_spec *spec _UNUSED)
         GET_ORIGINAL(usec_to_bytes);
         retVal = orig(t, spec);
     }
+    // FIXME
 //    DEBUG_MSG("%s(%lu) called, returned %lu", __func__, t, retVal);
     return retVal;
 }

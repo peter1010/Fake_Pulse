@@ -8,22 +8,41 @@
  * Licensed under the GPL License. See LICENSE file in the project root for full license information.  
  */
 
+#include <pthread.h>
+
 #include "pulseaudio.h"
 
-extern pa_threaded_mainloop * my_threaded_mainloop_new(void);
 
-extern int my_threaded_mainloop_start(pa_threaded_mainloop * m);
+class CThreadedMainloop
+{
+public:
+    CThreadedMainloop();
+    ~CThreadedMainloop();
 
-extern void my_threaded_mainloop_stop(pa_threaded_mainloop *m);
+    int start();
+    void stop();
 
-extern void my_threaded_mainloop_free(pa_threaded_mainloop* m);
-    
-extern pa_mainloop_api * my_threaded_mainloop_get_api(pa_threaded_mainloop * m);
+    pa_mainloop_api * get_api();
 
-extern int my_threaded_mainloop_in_thread(pa_threaded_mainloop * m);
+    int in_thread() const;
 
-extern void my_threaded_mainloop_lock(pa_threaded_mainloop * m);
+    void lock();
+    void unlock();
 
-extern void my_threaded_mainloop_unlock(pa_threaded_mainloop * m);
+    void signal(int wait_for_accept);
+    void wait();
+private:
+
+    pthread_t thread;
+    pthread_mutex_t mutex;
+    pthread_cond_t cond;
+    bool running;
+    pa_mainloop_api api;
+
+    static void * static_run(void * arg) { return reinterpret_cast<CThreadedMainloop *>(arg)->run(); };
+
+    void * run();
+};
+
 #endif
 

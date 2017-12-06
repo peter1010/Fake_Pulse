@@ -5,93 +5,92 @@
  * Licensed under the GPL License. See LICENSE file in the project root for full license information.  
  */
 
-#include <pthread.h>
 #include <stdbool.h>
 #include <unistd.h>
 
 #include "threaded_mainloop.hpp"
 
-struct ThreadedMainLoop
-{
-    pthread_t thread;
-    pthread_mutex_t mutex;
-    bool running;
-    pa_mainloop_api api;
-};
 
-static void * thread_entry(void * arg)
+void * CThreadedMainloop::run()
 {
-    struct ThreadedMainLoop * loop = (struct ThreadedMainLoop *)arg;
-    while(loop->running) {
+    while(running) {
+        pthread_mutex_lock(&mutex);
+        pthread_cond_signal(&cond);
+        pthread_mutex_unlock(&mutex);
+        
         sleep(1);
     }
     return NULL;
 }
 
 
-pa_threaded_mainloop * my_threaded_mainloop_new(void)
+CThreadedMainloop::CThreadedMainloop()
 {
-    pthread_mutexattr_t attr;
-    struct ThreadedMainLoop * loop = new struct ThreadedMainLoop;
-    loop->running = false;
+   running = false;
+}
+
+CThreadedMainloop::~CThreadedMainloop()
+{
+    pthread_mutex_destroy(&mutex);
+    pthread_cond_destroy(&cond);
+}
+
+
+int CThreadedMainloop::start()
+{
     do {
+        pthread_mutexattr_t attr;
+
         if(pthread_mutexattr_init(&attr) != 0)
-            break;;
+            break;
         if(pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE) != 0)
             break;
-        if(pthread_mutex_init(&loop->mutex, &attr) != 0)
+        if(pthread_mutex_init(&mutex, &attr) != 0)
             break;
 
         if(pthread_mutexattr_destroy(&attr) != 0)
             break;
+
+        if(pthread_cond_init(&cond, NULL) != 0)
+            break;
     }
     while(0);
-    return (pa_threaded_mainloop *)loop;
+    running = true;
+    return pthread_create(&thread, NULL, static_run, reinterpret_cast<void *>(this));
 }
 
-void my_threaded_mainloop_free(pa_threaded_mainloop* m)
+void CThreadedMainloop::stop()
 {
-    struct ThreadedMainLoop * loop = (struct ThreadedMainLoop *)m;
-    pthread_mutex_destroy(&loop->mutex);
-    free(loop);
+    running = false;
+    pthread_join(thread, NULL);
 }
 
-
-int my_threaded_mainloop_start(pa_threaded_mainloop * m)
+int CThreadedMainloop::in_thread() const
 {
-    struct ThreadedMainLoop * loop = (struct ThreadedMainLoop *)m;
-    loop->running = true;
-    return pthread_create(&loop->thread, NULL, thread_entry, (void *)loop);
+    return (pthread_self() == thread) ? 1 : 0;
 }
 
-void my_threaded_mainloop_stop(pa_threaded_mainloop *m)
+void CThreadedMainloop::lock()
 {
-    struct ThreadedMainLoop * loop = (struct ThreadedMainLoop *)m;
-    loop->running = false;
-    pthread_join(loop->thread, NULL);
+    pthread_mutex_lock(&mutex);
 }
 
-int my_threaded_mainloop_in_thread(pa_threaded_mainloop * m)
+void CThreadedMainloop::unlock()
 {
-    struct ThreadedMainLoop * loop = (struct ThreadedMainLoop *)m;
-    return (pthread_self() == loop->thread) ? 1 : 0;
-}
-
-void my_threaded_mainloop_lock(pa_threaded_mainloop * m)
-{
-    struct ThreadedMainLoop * loop = (struct ThreadedMainLoop *)m;
-    pthread_mutex_lock(&loop->mutex);
-}
-
-void my_threaded_mainloop_unlock(pa_threaded_mainloop * m)
-{
-    struct ThreadedMainLoop * loop = (struct ThreadedMainLoop *)m;
-    pthread_mutex_unlock(&loop->mutex);
+    pthread_mutex_unlock(&mutex);
 }
 
 
-pa_mainloop_api * my_threaded_mainloop_get_api(pa_threaded_mainloop * m)
+pa_mainloop_api * CThreadedMainloop::get_api()
 {
-    struct ThreadedMainLoop * loop = (struct ThreadedMainLoop *)m;
-    return &loop->api;
+    return &api;
+}
+    
+void CThreadedMainloop::signal(int wait_for_accept)
+{
+}
+
+void CThreadedMainloop::wait()
+{
+    pthread_cond_wait(&cond, &mutex);
 }
