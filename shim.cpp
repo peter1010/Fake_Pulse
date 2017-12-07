@@ -83,7 +83,7 @@ void * dlsym(void * handle, const char * symbol)
         // Symbol from libpulse?
 
         address = the_real_dlsym(libPulseHandle, symbol);
-        DEBUG_MSG("dlsym(%s) called", symbol);
+//        DEBUG_MSG("dlsym(%s) called", symbol);
 
         if(address) {
             char buf[100];
@@ -130,8 +130,6 @@ int dlclose(void * handle)
     } 
     return the_real_dlclose(handle);
 }
-
-#define ZZ_NAME(name) zz##name
 
 #define LOAD_SYM(name) dlsym(handle, "zz_" #name)
 
@@ -209,4 +207,3 @@ void init_symbols(void)
         dlclose(handle);
     }
 }
-

@@ -5,9 +5,13 @@
  * Licensed under the GPL License. See LICENSE file in the project root for full license information.  
  */
 
+
+#include "config.h"
+
+#ifdef INCLUDE_SIMPLE_THREADED_MAINLOOP
+
 #include <stdbool.h>
 #include <unistd.h>
-
 #include "threaded_mainloop.hpp"
 
 
@@ -94,3 +98,5 @@ void CThreadedMainloop::wait()
 {
     pthread_cond_wait(&cond, &mutex);
 }
+
+#endif

@@ -8,6 +8,10 @@
  * Licensed under the GPL License. See LICENSE file in the project root for full license information.  
  */
 
+#include "config.h"
+
+#ifdef INCLUDE_SIMPLE_THREADED_MAINLOOP
+
 #include <pthread.h>
 
 #include "pulseaudio.h"
@@ -44,5 +48,6 @@ private:
     void * run();
 };
 
+#endif
 #endif
 

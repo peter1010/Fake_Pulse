@@ -16,10 +16,10 @@ MAKEDEPEND=gcc -M $(CPPFLAGS)
 LD=gcc
 #-lstdc++
 
-LDFLAGS= -shared-libgcc -shared -Wl,--version-script=$(SRCDIR)/exportmap
-LIBS= -ldl -lpthread -lstdc++
+LDFLAGS= -shared-libgcc -shared  -Wl,--version-script=$(SRCDIR)/exportmap
+LIBS= -ldl -lstdc++ -lpthread
 
-OBJS= shim.o pulse.o logging.o originals.o threaded_mainloop.o context.o
+OBJS= shim.o logging.o originals.o pulse.o threaded_mainloop.o context.o blob.o
 
 .PHONY: all
 all: fake_pulse.so

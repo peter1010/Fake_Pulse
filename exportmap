@@ -1,0 +1,15 @@
+GLIBC_2.2.5 {
+global:
+    dlopen;
+    dlsym;
+    dlclose;
+};
+
+PULSE_0{
+global:
+    pa_*;
+    zz_*;
+
+local:
+ *;
+};
