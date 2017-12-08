@@ -15,6 +15,8 @@ class CContext
 {
 public:
     CContext(pa_mainloop_api * api, const char * name);
+
+    void ref();
     static void unref(CContext * self);
 
     pa_context_state_t get_state() const 
@@ -33,12 +35,20 @@ public:
 
     pa_operation * get_sink_info_by_name(const char * name, pa_sink_info_cb_t cb, void * userdata);
     
+    pa_operation * get_sink_info_list(pa_sink_info_cb_t cb, void * userdata);
+
+    pa_operation * get_source_info_list(pa_source_info_cb_t cb, void * userdata);
+
+    pa_operation * get_sink_input_info(uint32_t idx, pa_sink_input_info_cb_t cb, void *userdata);
+    
     pa_operation * set_sink_input_volume(uint32_t idx, 
             const pa_cvolume * volume, pa_context_success_cb_t cb, void * userdata);
 
     pa_operation * subscribe(pa_subscription_mask_t m, pa_context_success_cb_t cb, void *userdata);
 
     pa_time_event * rttime_new(pa_usec_t usec, pa_time_event_cb_t cb, void *userdata);
+
+    pa_operation * drain(pa_context_notify_cb_t cb, void * userdata);
 
 private:
     ~CContext(); // Must be called indirectly via unref
@@ -49,7 +59,7 @@ private:
     pa_context_subscribe_cb_t subscribe_cb_func; 
     void * subscribe_cb_data;
 
-    int refCount;
+    int mRefCount;
 };
 
 #endif

@@ -17,15 +17,20 @@ CContext::CContext(pa_mainloop_api * api, const char * name)
 {
     (void) name;
     (void) api;
-    refCount = 1;
+    mRefCount = 1;
     state_cb_func = NULL; 
     subscribe_cb_func = NULL; 
 }
 
+void CContext::ref() 
+{
+    mRefCount++; 
+}
+
 void CContext::unref(CContext * self)
 {
-    self->refCount--;
-    if(self->refCount <= 0) {
+    self->mRefCount--;
+    if(self->mRefCount <= 0) {
         delete self;
     }
 }
@@ -55,7 +60,7 @@ int CContext::connect(const char * server, pa_context_flags_t flags, const pa_sp
     }
     if(state_cb_func) {
         DEBUG_MSG("Calling set context state callback");
-        refCount++;
+        mRefCount++;
         state_cb_func(reinterpret_cast<pa_context *>(this), state_cb_data);
     }
     return 0;
@@ -85,7 +90,7 @@ pa_operation * CContext::get_server_info(pa_server_info_cb_t cb, void *userdata)
     info.channel_map.map[0] = PA_CHANNEL_POSITION_FRONT_LEFT;
     info.channel_map.map[1] = PA_CHANNEL_POSITION_FRONT_RIGHT;
     if(cb) {
-        refCount++;
+        mRefCount++;
         cb(reinterpret_cast<pa_context *>(this), &info, userdata);
     }
     return op;
@@ -129,9 +134,9 @@ pa_operation * CContext::get_sink_info_by_name(const char * name, pa_sink_info_c
     info.formats = formats;
 
     if(cb) {
-        refCount++;
+        mRefCount++;
         cb(reinterpret_cast<pa_context *>(this), &info, 0, userdata);
-        refCount++;
+        mRefCount++;
         cb(reinterpret_cast<pa_context *>(this), NULL, 1, userdata);
     }
     return op;
@@ -145,7 +150,7 @@ pa_operation * CContext::set_sink_input_volume(uint32_t idx,
     (void) volume;
 
     if(cb) {
-        refCount++;
+        mRefCount++;
         cb(reinterpret_cast<pa_context *>(this), 0, userdata);
     }
     return op;
@@ -155,7 +160,7 @@ pa_operation * CContext::subscribe(pa_subscription_mask_t m, pa_context_success_
 {
     (void) m;
     if(cb) {
-        refCount++;
+        mRefCount++;
         cb(reinterpret_cast<pa_context *>(this), 0, userdata);
     }
     return op;
@@ -169,4 +174,24 @@ pa_time_event * CContext::rttime_new(pa_usec_t usec, pa_time_event_cb_t cb, void
         //cb(pa_mainloop_api * api, pa_time_event *evt, const struct timeval * t, void * userdata)
     }
     return NULL;
+}
+
+void CContext::disconnect()
+{
+}
+
+pa_operation * CContext::get_sink_info_list(pa_sink_info_cb_t cb, void * userdata)
+{
+}
+
+pa_operation * CContext::get_source_info_list(pa_source_info_cb_t cb, void * userdata)
+{
+}
+
+pa_operation * CContext::drain(pa_context_notify_cb_t cb, void * userdata)
+{
+}
+
+pa_operation * CContext::get_sink_input_info(uint32_t idx, pa_sink_input_info_cb_t cb, void *userdata)
+{
 }

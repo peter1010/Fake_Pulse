@@ -14,40 +14,45 @@
 #include "threaded_mainloop.hpp"
 #include "context.hpp"
 #include "blob.hpp"
+#include "stream.hpp"
 
 #define _UNUSED __attribute__((unused))
 
 void init_symbols(void);
 
 #define GET_ORIGINAL(name) FP_##name orig = zz_##name
-#define ListenMode 1
+
 
 #ifdef INCLUDE_SIMPLE_THREADED_MAINLOOP
 bool UseRealThreadedMainloop = false;
 #else
 #define UseRealThreadedMainloop true
 #endif
-
 bool UseRealMainloopApi = true;
-bool UseRealContext = true;
+bool UseRealPulse = true;
+bool UseRealUtilities = true;
+
 
 bool TraceThreadedMainLoop = true;
 bool TraceMainloopApi = false;
 bool TraceContext = true;
-
+bool TraceStream = true;
+bool TraceUtilities = true;
+bool TraceOperation = true;
 
 /*----------------------------------------------------------------------------*/
 const char * pa_get_library_version(void)
 {
     const char * retVal;
-    if(ListenMode) {
+    if(UseRealUtilities) {
         GET_ORIGINAL(get_library_version);
         retVal = orig();
     } else {
         retVal = "11.1.0";
     }
-    DEBUG_MSG("%s() returned %s", __func__, retVal);
-//    exit(0);
+    if(TraceUtilities) {
+        DEBUG_MSG("%s() returned %s", __func__, retVal);
+    }
     return retVal;
 }
 
@@ -55,13 +60,16 @@ const char * pa_get_library_version(void)
 int pa_channel_map_can_balance(const pa_channel_map * p)
 {
     int retVal;
-    if(ListenMode) {
+    if(UseRealUtilities) {
         GET_ORIGINAL(channel_map_can_balance);
         retVal = orig(p);
     } else {
         retVal = 0;  /* Means no balance */
+        // FIXME
     }
-    DEBUG_MSG("%s returned %i", __func__, retVal);
+    if(TraceUtilities) {
+        DEBUG_MSG("%s returned %i", __func__, retVal);
+    }
     return retVal;
 }
 
@@ -69,8 +77,10 @@ int pa_channel_map_can_balance(const pa_channel_map * p)
 pa_channel_map * pa_channel_map_init(pa_channel_map * p)
 {
     pa_channel_map * retVal;
-    DEBUG_MSG("%s called", __func__);
-    if(ListenMode) {
+    if(TraceUtilities) {
+        DEBUG_MSG("%s called", __func__);
+    }
+    if(UseRealUtilities) {
         GET_ORIGINAL(channel_map_init);
         retVal = orig(p);
     } else {
@@ -79,6 +89,7 @@ pa_channel_map * pa_channel_map_init(pa_channel_map * p)
         p->channels = 2;
         p->map[0] = PA_CHANNEL_POSITION_FRONT_LEFT;
         p->map[1] = PA_CHANNEL_POSITION_FRONT_RIGHT;
+        // FIXME
     }
     return retVal;
 }
@@ -103,13 +114,15 @@ int pa_context_connect(pa_context * c, const char * server,
         }
     }
 
-    if(UseRealContext) {
+    if(UseRealPulse) {
         GET_ORIGINAL(context_connect);
         retVal = orig(c, server, flags, api);
     } else {
         retVal = reinterpret_cast<CContext *>(c)->connect(server, flags, api);
     }
-    DEBUG_MSG("%s returned %i", __func__, retVal);
+    if(TraceContext) {
+        DEBUG_MSG("%s returned %i", __func__, retVal);
+    }
     return retVal;
 }
 
@@ -119,7 +132,7 @@ void pa_context_disconnect(pa_context * c)
     if(TraceContext) {
         DEBUG_MSG("%s called ", __func__);
     }
-    if(UseRealContext) {
+    if(UseRealPulse) {
         GET_ORIGINAL(context_disconnect);
         orig(c);
     } else {
@@ -128,10 +141,34 @@ void pa_context_disconnect(pa_context * c)
 }
 
 /*----------------------------------------------------------------------------*/
-pa_operation * pa_context_drain(pa_context * c _UNUSED, pa_context_notify_cb_t cb _UNUSED, void * userdata _UNUSED)
+/**
+ * Intercept the callback! 
+ */
+static pa_context_notify_cb_t context_drain_cb_func = NULL;
+    
+static void context_drain_cb(pa_context * c, void * userdata)
 {
-    DEBUG_MSG("TODO %s called ", __func__);
-    return NULL;
+    DEBUG_MSG("%s called ", __func__);
+    context_drain_cb_func(c, userdata);
+}
+
+pa_operation * pa_context_drain(pa_context * c, pa_context_notify_cb_t cb, void * userdata)
+{
+    pa_operation * retVal;
+    if(TraceContext) {
+        DEBUG_MSG("%s called ", __func__);
+        if(cb) {
+            context_drain_cb_func = cb;
+            cb = context_drain_cb;
+        }
+    }
+    if(UseRealPulse) {
+        GET_ORIGINAL(context_drain);
+        retVal = orig(c, cb, userdata);
+    } else {
+        retVal = reinterpret_cast<CContext *>(c)->drain(cb, userdata);
+    }
+    return retVal;
 }
 
 /*----------------------------------------------------------------------------*/
@@ -153,10 +190,12 @@ pa_operation * pa_context_get_server_info(pa_context *c, pa_server_info_cb_t cb,
     pa_operation * retVal;
     if(TraceContext) {
         DEBUG_MSG("%s called ", __func__);
-        context_get_server_info_cb_func = cb;
-        cb = cb ? context_get_server_info_cb : cb;
+        if(cb) {
+            context_get_server_info_cb_func = cb;
+            cb = context_get_server_info_cb;
+        }
     }
-    if(UseRealContext) {
+    if(UseRealPulse) {
         GET_ORIGINAL(context_get_server_info);
         retVal = orig(c, cb, userdata);
     } else {
@@ -171,13 +210,13 @@ pa_operation * pa_context_get_server_info(pa_context *c, pa_server_info_cb_t cb,
  * Intercept the callback! 
  */
 
-static pa_sink_info_cb_t context_get_sink_info_cb_func = NULL;
+static pa_sink_info_cb_t context_get_sink_info_by_name_cb_func = NULL;
 
-static void context_get_sink_info_cb(pa_context *c, const pa_sink_info * info, int eol, void * userdata)
+static void context_get_sink_info_by_name_cb(pa_context *c, const pa_sink_info * info, int eol, void * userdata)
 {
     DEBUG_MSG("%s(%i) called ", __func__, eol);
     log_sink_info(info);
-    context_get_sink_info_cb_func(c, info, eol, userdata);
+    context_get_sink_info_by_name_cb_func(c, info, eol, userdata);
 }
 
 pa_operation * pa_context_get_sink_info_by_name(pa_context * c,
@@ -186,10 +225,12 @@ pa_operation * pa_context_get_sink_info_by_name(pa_context * c,
     pa_operation * retVal;
     if(TraceContext) {
         DEBUG_MSG("%s(%s) called ", __func__, name);
-        context_get_sink_info_cb_func = cb;
-        cb = cb ? context_get_sink_info_cb : cb;
+        if(cb) {
+            context_get_sink_info_by_name_cb_func = cb;
+            cb = context_get_sink_info_by_name_cb;
+        }
     }
-    if(UseRealContext) {
+    if(UseRealPulse) {
         GET_ORIGINAL(context_get_sink_info_by_name);
         retVal = orig(c, name, cb, userdata);
     } else {
@@ -199,30 +240,99 @@ pa_operation * pa_context_get_sink_info_by_name(pa_context * c,
 }
 
 /*----------------------------------------------------------------------------*/
+/**
+ * Intercept the callback! 
+ */
 
-pa_operation * pa_context_get_sink_info_list(pa_context * c _UNUSED,
-        pa_sink_info_cb_t cb _UNUSED, void * userdata _UNUSED)
+static pa_sink_info_cb_t context_get_sink_info_list_cb_func = NULL;
+
+static void context_get_sink_info_list_cb(pa_context *c, const pa_sink_info * info, int eol, void * userdata)
 {
-    DEBUG_MSG("TODO %s called ", __func__);
-    return NULL;
+    DEBUG_MSG("%s(%i) called ", __func__, eol);
+    log_sink_info(info);
+    context_get_sink_info_list_cb_func(c, info, eol, userdata);
+}
+
+
+pa_operation * pa_context_get_sink_info_list(pa_context * c,
+        pa_sink_info_cb_t cb, void * userdata)
+{
+    pa_operation * retVal;
+    if(TraceContext) {
+        DEBUG_MSG("%s() called ", __func__);
+        if(cb) {
+            context_get_sink_info_list_cb_func = cb;
+            cb = context_get_sink_info_list_cb;
+        }
+    }
+    if(UseRealPulse) {
+        GET_ORIGINAL(context_get_sink_info_list);
+        retVal = orig(c, cb, userdata);
+    } else {
+        retVal = reinterpret_cast<CContext *>(c)->get_sink_info_list(cb, userdata);
+    }
+    return retVal;
 }
 
 /*----------------------------------------------------------------------------*/
 
-pa_operation * pa_context_get_sink_input_info(pa_context * c _UNUSED,
-        uint32_t idx _UNUSED, pa_sink_input_info_cb_t cb _UNUSED, void *userdata _UNUSED)
+static pa_sink_input_info_cb_t context_get_sink_input_info_cb_func = NULL;
+
+static void context_get_sink_input_info_cb(pa_context *c, const pa_sink_input_info * info, int eol, void * userdata)
 {
-    DEBUG_MSG("TODO %s(%i) called ", __func__, idx);
-    return NULL;
+    DEBUG_MSG("%s(%i) called ", __func__, eol);
+    context_get_sink_input_info_cb_func(c, info, eol, userdata);
+}
+
+
+pa_operation * pa_context_get_sink_input_info(pa_context * c,
+        uint32_t idx, pa_sink_input_info_cb_t cb, void *userdata)
+{
+    pa_operation * retVal;
+    if(TraceContext) {
+        DEBUG_MSG("%s(%u) called ", __func__, idx);
+        if(cb) {
+            context_get_sink_input_info_cb_func = cb;
+            cb = context_get_sink_input_info_cb;
+        }
+    }
+    if(UseRealPulse) {
+        GET_ORIGINAL(context_get_sink_input_info);
+        retVal = orig(c, idx, cb, userdata);
+    } else {
+        retVal = reinterpret_cast<CContext *>(c)->get_sink_input_info(idx, cb, userdata);
+    }
+    return retVal;
 }
 
 /*----------------------------------------------------------------------------*/
 
-pa_operation * pa_context_get_source_info_list(pa_context *ci _UNUSED,
-        pa_source_info_cb_t cb _UNUSED, void * userdata _UNUSED)
+static pa_source_info_cb_t context_get_source_info_list_cb_func = NULL;
+
+static void context_get_source_info_list_cb(pa_context *c, const pa_source_info * info, int eol, void * userdata)
 {
-    DEBUG_MSG("TODO %s called ", __func__);
-    return NULL;
+    DEBUG_MSG("%s called ", __func__);
+    context_get_source_info_list_cb_func(c, info, eol, userdata);
+}
+
+pa_operation * pa_context_get_source_info_list(pa_context *c,
+        pa_source_info_cb_t cb, void * userdata)
+{
+    pa_operation * retVal;
+    if(TraceContext) {
+        DEBUG_MSG("%s called ", __func__);
+        if(cb) {
+            context_get_source_info_list_cb_func = cb;
+            cb = context_get_source_info_list_cb;
+        }
+    }
+    if(UseRealPulse) {
+        GET_ORIGINAL(context_get_source_info_list);
+        retVal = orig(c, cb, userdata);
+    } else {
+        retVal = reinterpret_cast<CContext *>(c)->get_source_info_list(cb, userdata);
+    }
+    return retVal;
 }
 
 /*----------------------------------------------------------------------------*/
@@ -230,7 +340,7 @@ pa_operation * pa_context_get_source_info_list(pa_context *ci _UNUSED,
 pa_context_state_t pa_context_get_state(pa_context * c)
 {
     pa_context_state_t retVal;
-    if(UseRealContext) {
+    if(UseRealPulse) {
         GET_ORIGINAL(context_get_state);
         retVal = orig(c);
     } else {
@@ -250,7 +360,7 @@ pa_context * pa_context_new(pa_mainloop_api * mainloop, const char * name)
     if(TraceContext) {
         DEBUG_MSG("%s(%s) called ", __func__, name ? name : "None");
     }
-    if(UseRealContext) {
+    if(UseRealPulse) {
         GET_ORIGINAL(context_new);
         c = orig(mainloop, name);
     } else {
@@ -277,10 +387,12 @@ pa_time_event * pa_context_rttime_new(pa_context * c,
     pa_time_event * retVal;
     if(TraceContext) {
         DEBUG_MSG("%s called ", __func__);
-        time_event_cb_func = cb;
-        cb = cb ? time_event_cb : cb;
+        if(cb) {
+            time_event_cb_func = cb;
+            cb = time_event_cb;
+        }
     }
-    if(UseRealContext) {
+    if(UseRealPulse) {
         GET_ORIGINAL(context_rttime_new);
         retVal = orig(c, usec, cb, userdata);
     } else {
@@ -307,10 +419,12 @@ pa_operation * pa_context_set_sink_input_volume(pa_context * c,
     pa_operation * retVal;
     if(TraceContext) {
         DEBUG_MSG("%s called ", __func__);
-        context_sink_input_volume_cb_func = cb;
-        cb = cb ? context_sink_input_volume_cb : cb;
+        if(cb) {
+            context_sink_input_volume_cb_func = cb;
+            cb = context_sink_input_volume_cb;
+        }
     }
-    if(UseRealContext) {
+    if(UseRealPulse) {
         GET_ORIGINAL(context_set_sink_input_volume);
         retVal = orig(c, idx, volume, cb, userdata);
     } else {
@@ -336,16 +450,37 @@ void pa_context_set_state_callback(pa_context * c, pa_context_notify_cb_t cb, vo
 {
     if(TraceContext) {
         DEBUG_MSG("%s called ", __func__);
-        context_state_cb_func = cb;
-        cb = cb ? context_state_cb : cb;
+        if(cb) {
+            context_state_cb_func = cb;
+            cb = context_state_cb;
+        }
     }
-    if(UseRealContext) {
+    if(UseRealPulse) {
         GET_ORIGINAL(context_set_state_callback);
         orig(c, cb, userdata);
     } else {
         reinterpret_cast<CContext *>(c)->set_state_callback(cb, userdata);
     }
 }
+
+#if 0
+/*----------------------------------------------------------------------------*/
+
+pa_context * pa_context_ref(pa_context * c)
+{
+    pa_context * retVal;
+    if(TraceContext) {
+        DEBUG_MSG("%s called ", __func__);
+    }
+    if(UseRealPulse) {
+        GET_ORIGINAL(context_ref);
+        retVal = orig(c);
+    } else {
+        retVal = reinterpret_cast<CContext *>(c)->ref();
+    }
+    return retVal;
+}
+#endif
 
 /*----------------------------------------------------------------------------*/
 
@@ -354,7 +489,7 @@ void pa_context_unref(pa_context * c)
     if(TraceContext) {
         DEBUG_MSG("%s called ", __func__);
     }
-    if(UseRealContext) {
+    if(UseRealPulse) {
         GET_ORIGINAL(context_unref);
         orig(c);
     } else {
@@ -366,9 +501,11 @@ void pa_context_unref(pa_context * c)
 
 pa_cvolume * pa_cvolume_set(pa_cvolume * a, unsigned channels, pa_volume_t v)
 {
-    pa_cvolume * retVal;
-    DEBUG_MSG("%s called ", __func__);
-    if(ListenMode) {
+    pa_cvolume * retVal = NULL;
+    if(TraceUtilities) {
+        DEBUG_MSG("%s called ", __func__);
+    }
+    if(UseRealUtilities) {
         GET_ORIGINAL(cvolume_set);
         retVal = orig(a, channels, v);
     }
@@ -378,38 +515,51 @@ pa_cvolume * pa_cvolume_set(pa_cvolume * a, unsigned channels, pa_volume_t v)
 
 /*----------------------------------------------------------------------------*/
 
-pa_cvolume * pa_cvolume_set_balance(pa_cvolume * v _UNUSED, const pa_channel_map * map _UNUSED, float new_balance _UNUSED)
+pa_cvolume * pa_cvolume_set_balance(pa_cvolume * v, const pa_channel_map * map, float new_balance)
 {
-    DEBUG_MSG("TODO %s called ", __func__);
-    return NULL;
+    pa_cvolume * retVal = NULL;
+    if(TraceUtilities) {
+        DEBUG_MSG("%s called ", __func__);
+    }
+    if(UseRealUtilities) {
+        GET_ORIGINAL(cvolume_set_balance);
+        retVal = orig(v, map, new_balance);
+    }
+    // FIXME
+    return retVal;
 }
 
 /*----------------------------------------------------------------------------*/
 
 size_t pa_frame_size(const pa_sample_spec * spec)
 {
-    size_t retVal;
-    if(ListenMode) {
+    size_t retVal = 0;
+    if(UseRealUtilities) {
         GET_ORIGINAL(frame_size);
         retVal = orig(spec);
     }
     // FIXME
-//    DEBUG_MSG("%s returned %lu ", __func__, retVal);
+    if(TraceUtilities) {
+        DEBUG_MSG("%s returned %lu ", __func__, retVal);
+    }
     return retVal;
 }
 
+/*----------------------------------------------------------------------------*/
 
 pa_operation_state_t pa_operation_get_state(pa_operation *o)
 {
     pa_operation_state_t retVal;
-    if(ListenMode) {
+    if(UseRealPulse) {
         GET_ORIGINAL(operation_get_state);
         retVal = orig(o);
     } else {
         // FIXME
         retVal = PA_OPERATION_RUNNING;
     }
-    DEBUG_MSG("%s returned %s", __func__, operation_state2str(retVal));
+    if(TraceOperation) {
+        DEBUG_MSG("%s returned %s", __func__, operation_state2str(retVal));
+    }
     return retVal;
 }
 
@@ -417,8 +567,10 @@ pa_operation_state_t pa_operation_get_state(pa_operation *o)
 
 void pa_operation_unref(pa_operation *o)
 {
-//    DEBUG_MSG("%s called ", __func__);
-    if(ListenMode) {
+    if(TraceOperation) {
+        DEBUG_MSG("%s called ", __func__);
+    }
+    if(UseRealPulse) {
         GET_ORIGINAL(operation_unref);
         orig(o);
     }
@@ -438,35 +590,50 @@ const char * pa_proplist_gets(pa_proplist * p _UNUSED, const char * key _UNUSED)
 pa_usec_t pa_rtclock_now(void)
 {
     pa_usec_t retVal;
-    if(ListenMode) {
+    if(UseRealUtilities) {
         GET_ORIGINAL(rtclock_now);
         retVal = orig();
     } else {
         retVal = 0;
     }
-//    DEBUG_MSG("%s returned %lu", __func__, retVal);
-    return retVal;
-}
-
-/*----------------------------------------------------------------------------*/
-
-int pa_stream_begin_write(pa_stream *p _UNUSED, void **data _UNUSED, size_t *nbytes _UNUSED)
-{
-    int retVal;
-    DEBUG_MSG("%s called ", __func__);
-    if(ListenMode) {
-        GET_ORIGINAL(stream_begin_write);
-        retVal = orig(p, data, nbytes);
+    if(TraceUtilities) {
+        DEBUG_MSG("%s returned %lu", __func__, retVal);
     }
     return retVal;
 }
 
 /*----------------------------------------------------------------------------*/
 
-int pa_stream_cancel_write(pa_stream * p _UNUSED)
+int pa_stream_begin_write(pa_stream * p, void ** data, size_t * nbytes)
 {
-    DEBUG_MSG("TODO %s called ", __func__);
-    return 0;
+    int retVal;
+    if(TraceStream) {
+        DEBUG_MSG("%s called ", __func__);
+    }
+    if(UseRealPulse) {
+        GET_ORIGINAL(stream_begin_write);
+        retVal = orig(p, data, nbytes);
+    } else {
+        retVal = reinterpret_cast<CStream *>(p)->begin_write(data, nbytes);
+    }
+    return retVal;
+}
+
+/*----------------------------------------------------------------------------*/
+
+int pa_stream_cancel_write(pa_stream * p)
+{
+    int retVal;
+    if(TraceStream) {
+        DEBUG_MSG("%s called ", __func__);
+    }
+    if(UseRealPulse) {
+        GET_ORIGINAL(stream_cancel_write);
+        retVal = orig(p);
+    } else {
+        retVal = reinterpret_cast<CStream *>(p)->cancel_write();
+    }
+    return retVal;
 }
 
 /*----------------------------------------------------------------------------*/
@@ -475,13 +642,14 @@ int pa_stream_connect_playback(pa_stream * s,
         const pa_cvolume *volume, pa_stream * sync_stream)
 {
     int retVal;
-    DEBUG_MSG("%s(%s) called ", __func__, dev);
-    if(ListenMode) {
+    if(TraceStream) {
+        DEBUG_MSG("%s(%s) called ", __func__, dev);
+    }
+    if(UseRealPulse) {
         GET_ORIGINAL(stream_connect_playback);
         retVal = orig(s, dev, attr, flags, volume, sync_stream);
     } else {
-        // FIXME
-        retVal = 0;
+        retVal = reinterpret_cast<CStream *>(s)->connect_playback(dev, attr, flags, volume, sync_stream);
     }
     return retVal;
 }
@@ -502,13 +670,19 @@ static void stream_cork_cb(pa_stream * p, int t, void * userdata)
 pa_operation * pa_stream_cork(pa_stream * s, int b, pa_stream_success_cb_t cb, void * userdata)
 {
     pa_operation * retVal;
-    DEBUG_MSG("%s called ", __func__);
-    stream_cork_cb_func = cb;
-    if(ListenMode) {
-        GET_ORIGINAL(stream_cork);
-        retVal = orig(s, b, cb ? stream_cork_cb : cb, userdata);
+    if(TraceStream) {
+        DEBUG_MSG("%s called ", __func__);
+        if(cb) {
+            stream_cork_cb_func = cb;
+            cb = stream_cork_cb;
+        }
     }
-    // FIXME
+    if(UseRealPulse) {
+        GET_ORIGINAL(stream_cork);
+        retVal = orig(s, b, cb, userdata);
+    } else {
+        retVal = reinterpret_cast<CStream *>(s)->cork(b, cb, userdata);
+    }
     return retVal;
 }
 
@@ -517,21 +691,33 @@ pa_operation * pa_stream_cork(pa_stream * s, int b, pa_stream_success_cb_t cb, v
 int pa_stream_disconnect(pa_stream * s)
 {
     int retVal;
-    DEBUG_MSG("%s called ", __func__);
-    if(ListenMode) {
+    if(TraceStream) {
+        DEBUG_MSG("%s called ", __func__);
+    }
+    if(UseRealPulse) {
         GET_ORIGINAL(stream_disconnect);
         retVal = orig(s);
+    } else {
+        retVal = reinterpret_cast<CStream *>(s)->disconnect();
     }
-    // FIXME
     return retVal;
 }
 
 /*----------------------------------------------------------------------------*/
 
-const pa_channel_map * pa_stream_get_channel_map(pa_stream * s _UNUSED)
+const pa_channel_map * pa_stream_get_channel_map(pa_stream * s)
 {
-    DEBUG_MSG("TODO %s called ", __func__);
-    return NULL;
+    const pa_channel_map * retVal;
+    if(TraceStream) {
+        DEBUG_MSG("%s called ", __func__);
+    }
+    if(UseRealPulse) {
+        GET_ORIGINAL(stream_get_channel_map);
+        retVal = orig(s);
+    } else {
+        retVal = reinterpret_cast<CStream *>(s)->get_channel_map();
+    }
+    return retVal;
 }
 
 /*----------------------------------------------------------------------------*/
@@ -539,21 +725,33 @@ const pa_channel_map * pa_stream_get_channel_map(pa_stream * s _UNUSED)
 uint32_t pa_stream_get_index(pa_stream * s)
 {
     uint32_t retVal;
-    if(ListenMode) {
+    if(UseRealPulse) {
         GET_ORIGINAL(stream_get_index);
         retVal = orig(s);
+    } else {
+        retVal = reinterpret_cast<CStream *>(s)->get_index();
     }
-    // FIXME
-    DEBUG_MSG("%s returned %u", __func__, retVal);
+    if(TraceStream) {
+        DEBUG_MSG("%s returned %u", __func__, retVal);
+    }
     return retVal;
 }
 
 /*----------------------------------------------------------------------------*/
 
-int pa_stream_get_latency(pa_stream * s _UNUSED, pa_usec_t * r_usec _UNUSED, int * negative _UNUSED)
+int pa_stream_get_latency(pa_stream * s, pa_usec_t * r_usec, int * negative)
 {
-    DEBUG_MSG("TODO %s called ", __func__);
-    return 0;
+    int retVal;
+    if(TraceStream) {
+        DEBUG_MSG("%s called ", __func__);
+    }
+    if(UseRealPulse) {
+        GET_ORIGINAL(stream_get_latency);
+        retVal = orig(s, r_usec, negative);
+    } else {
+        retVal = reinterpret_cast<CStream *>(s)->get_latency(r_usec, negative);
+    }
+    return retVal;
 }
 
 /*----------------------------------------------------------------------------*/
@@ -561,12 +759,15 @@ int pa_stream_get_latency(pa_stream * s _UNUSED, pa_usec_t * r_usec _UNUSED, int
 const pa_sample_spec * pa_stream_get_sample_spec(pa_stream * s)
 {
     const pa_sample_spec * retVal;
-    DEBUG_MSG("%s called ", __func__);
-    if(ListenMode) {
+    if(TraceStream) {
+        DEBUG_MSG("%s called ", __func__);
+    }
+    if(UseRealPulse) {
         GET_ORIGINAL(stream_get_sample_spec);
         retVal = orig(s);
+    } else {
+        retVal = reinterpret_cast<CStream *>(s)->get_sample_spec();
     }
-    // FIXME
     return retVal;
 }
 
@@ -575,12 +776,15 @@ const pa_sample_spec * pa_stream_get_sample_spec(pa_stream * s)
 pa_stream_state_t pa_stream_get_state(pa_stream * p)
 {
     pa_stream_state_t retVal;
-    DEBUG_MSG("%s called ", __func__);
-    if(ListenMode) {
+    if(TraceStream) {
+        DEBUG_MSG("%s called ", __func__);
+    }
+    if(UseRealPulse) {
         GET_ORIGINAL(stream_get_state);
         retVal = orig(p);
+    } else {
+        retVal = reinterpret_cast<CStream *>(p)->get_state();
     }
-    // FIXME
     return retVal;
 }
 
@@ -589,12 +793,15 @@ pa_stream_state_t pa_stream_get_state(pa_stream * p)
 int pa_stream_get_time(pa_stream * s, pa_usec_t * r_usec)
 {
     int retVal;
-//    DEBUG_MSG("%s called ", __func__);
-    if(ListenMode) {
+    if(TraceStream) {
+        DEBUG_MSG("%s called ", __func__);
+    }
+    if(UseRealPulse) {
         GET_ORIGINAL(stream_get_time);
         retVal = orig(s, r_usec);
+    } else {
+        retVal = reinterpret_cast<CStream *>(s)->get_time(r_usec);
     }
-    // FIXME
     return retVal;
 }
 
@@ -606,12 +813,11 @@ pa_stream * pa_stream_new(pa_context * c, const char * name, const pa_sample_spe
     if(TraceContext) {
         DEBUG_MSG("%s(%s) called ", __func__, name);
     }
-    if(UseRealContext) {
+    if(UseRealPulse) {
         GET_ORIGINAL(stream_new);
         retVal = orig(c, name, ss, map);
     } else {
-        // FIXME
-        retVal = NULL;
+        retVal = reinterpret_cast<pa_stream *>(new CStream(reinterpret_cast<CContext *>(c), name, ss, map));
     }
     return retVal;
 }
@@ -620,8 +826,17 @@ pa_stream * pa_stream_new(pa_context * c, const char * name, const pa_sample_spe
 
 int pa_stream_peek(pa_stream * p _UNUSED, const void **data _UNUSED, size_t *nbytes _UNUSED)
 {
-    DEBUG_MSG("TODO %s called ", __func__);
-    return 0;
+    int retVal;
+    if(TraceStream) {
+        DEBUG_MSG("%s called ", __func__);
+    }
+    if(UseRealPulse) {
+        GET_ORIGINAL(stream_peek);
+        retVal = orig(p, data, nbytes);
+    } else {
+        retVal = reinterpret_cast<CStream *>(p)->peek(data, nbytes);
+    }
+    return retVal;
 }
 
 /*----------------------------------------------------------------------------*/
@@ -637,15 +852,21 @@ static void stream_state_cb(pa_stream * s, void * userdata)
     stream_state_cb_func(s, userdata);
 }
 
-void pa_stream_set_state_callback(pa_stream * s _UNUSED, pa_stream_notify_cb_t cb _UNUSED, void * userdata _UNUSED)
+void pa_stream_set_state_callback(pa_stream * s, pa_stream_notify_cb_t cb, void * userdata)
 {
-    DEBUG_MSG("%s called ", __func__);
-    stream_state_cb_func = cb;
-    if(ListenMode) {
-        GET_ORIGINAL(stream_set_state_callback);
-        orig(s, cb ? stream_state_cb : cb, userdata);
+    if(TraceStream) {
+        DEBUG_MSG("%s called ", __func__);
+        if(cb) {
+            stream_state_cb_func = cb;
+            cb = stream_state_cb;
+        }
     }
-    // FIXME
+    if(UseRealPulse) {
+        GET_ORIGINAL(stream_set_state_callback);
+        orig(s, cb, userdata);
+    } else {
+        reinterpret_cast<CStream *>(s)->set_state_callback(cb, userdata);
+    }
 }
 
 /*----------------------------------------------------------------------------*/
@@ -661,27 +882,36 @@ static void stream_write_cb(pa_stream * p, size_t nbytes, void * userdata)
 }
 
 
-void pa_stream_set_write_callback(pa_stream * p _UNUSED, pa_stream_request_cb_t cb _UNUSED, void * userdata _UNUSED)
+void pa_stream_set_write_callback(pa_stream * p, pa_stream_request_cb_t cb, void * userdata)
 {
-    DEBUG_MSG("%s called ", __func__);
-    stream_write_cb_func = cb;
-    if(ListenMode) {
-        GET_ORIGINAL(stream_set_write_callback);
-        orig(p, cb ? stream_write_cb : cb, userdata);
+    if(TraceStream) {
+        DEBUG_MSG("%s called ", __func__);
+        if(cb) {
+            stream_write_cb_func = cb;
+            cb = stream_write_cb ;
+        }
     }
-    // FIXME
+    if(UseRealPulse) {
+        GET_ORIGINAL(stream_set_write_callback);
+        orig(p, cb, userdata);
+    } else {
+        reinterpret_cast<CStream *>(p)->set_write_callback(cb, userdata);
+    }
 }
 
 /*----------------------------------------------------------------------------*/
 
-void pa_stream_unref(pa_stream * s _UNUSED)
+void pa_stream_unref(pa_stream * s)
 {
-    DEBUG_MSG("%s called ", __func__);
-    if(ListenMode) {
+    if(TraceStream) {
+        DEBUG_MSG("%s called ", __func__);
+    }
+    if(UseRealPulse) {
         GET_ORIGINAL(stream_unref);
         orig(s);
+    } else {
+        CStream::unref(reinterpret_cast<CStream *>(s));
     }
-    // FIXME
 }
 
 /*----------------------------------------------------------------------------*/
@@ -699,11 +929,18 @@ static void stream_update_timing_cb(pa_stream * p, int t, void * userdata)
 pa_operation * pa_stream_update_timing_info(pa_stream * p, pa_stream_success_cb_t cb, void * userdata)
 {
     pa_operation * retVal;
-    DEBUG_MSG("%s called ", __func__);
-    stream_update_timing_cb_func = cb;
-    if(ListenMode) {
+    if(TraceStream) {
+        DEBUG_MSG("%s called ", __func__);
+        if(cb) {
+            stream_update_timing_cb_func = cb;
+            cb = stream_update_timing_cb;
+        }
+    }
+    if(UseRealPulse) {
         GET_ORIGINAL(stream_update_timing_info);
-        retVal = orig(p, cb ? stream_update_timing_cb : cb, userdata);
+        retVal = orig(p, cb, userdata);
+    } else {
+        retVal = reinterpret_cast<CStream *>(p)->update_timing_info(cb, userdata);
     }
     return retVal;
 }
@@ -715,7 +952,7 @@ pa_operation * pa_stream_update_timing_info(pa_stream * p, pa_stream_success_cb_
 
 static pa_free_cb_t write_free_cb_func = NULL;
 
-void write_free_cb(void * data)
+static void write_free_cb(void * data)
 {
     DEBUG_MSG("%s called ", __func__);
     write_free_cb_func(data);
@@ -725,13 +962,19 @@ int pa_stream_write(pa_stream * p,
         const void * data, size_t nbytes, pa_free_cb_t free_cb, off_t offset, pa_seek_mode_t seek)
 {
     int retVal;
-    write_free_cb_func = free_cb;
-    DEBUG_MSG("%s called ", __func__);
-    if(ListenMode) {
+    if(TraceStream) {
+        DEBUG_MSG("%s called ", __func__);
+        if(free_cb) {
+            write_free_cb_func = free_cb;
+            free_cb = write_free_cb;
+        }
+    }
+    if(UseRealPulse) {
         GET_ORIGINAL(stream_write);
         retVal = orig(p, data, nbytes, free_cb ? write_free_cb : free_cb, offset, seek);
+    } else {
+        retVal = reinterpret_cast<CStream *>(p)->write(data, nbytes, free_cb, offset, seek);
     }
-    // FIXME
     return retVal;
 }
 
@@ -739,9 +982,11 @@ int pa_stream_write(pa_stream * p,
 
 pa_volume_t pa_sw_volume_from_linear(double v)
 {
-    pa_volume_t retVal;
-    DEBUG_MSG("%s called ", __func__);
-    if(ListenMode) {
+    pa_volume_t retVal = 0;
+    if(TraceUtilities) {
+        DEBUG_MSG("%s called ", __func__);
+    }
+    if(UseRealUtilities) {
         GET_ORIGINAL(sw_volume_from_linear);
         retVal = orig(v);
     }
@@ -767,84 +1012,84 @@ void pa_threaded_mainloop_free(pa_threaded_mainloop* m)
 
 /*----------------------------------------------------------------------------*/
 
-struct pa_mainloop_api * pa_mainloop_api_real = NULL;
+static struct pa_mainloop_api * pa_mainloop_api_real = NULL;
 
-pa_io_event* io_new_shim(pa_mainloop_api*a, int fd, pa_io_event_flags_t events, pa_io_event_cb_t cb, void *userdata)
+static pa_io_event* io_new_shim(pa_mainloop_api*a, int fd, pa_io_event_flags_t events, pa_io_event_cb_t cb, void *userdata)
 {
     DEBUG_MSG("%s called ", __func__);
     (void) a;
     return pa_mainloop_api_real->io_new(pa_mainloop_api_real, fd, events, cb, userdata);
 }
     
-void io_enable_shim(pa_io_event* e, pa_io_event_flags_t events)
+static void io_enable_shim(pa_io_event* e, pa_io_event_flags_t events)
 {
     DEBUG_MSG("%s called ", __func__);
     pa_mainloop_api_real->io_enable(e, events);
 }
 
-void io_free_shim(pa_io_event* e)
+static void io_free_shim(pa_io_event* e)
 {
     DEBUG_MSG("%s called ", __func__);
     pa_mainloop_api_real->io_free(e);
 }
 
-void io_set_destroy_shim(pa_io_event *e, pa_io_event_destroy_cb_t cb)
+static void io_set_destroy_shim(pa_io_event *e, pa_io_event_destroy_cb_t cb)
 {    
     DEBUG_MSG("%s called ", __func__);
     pa_mainloop_api_real->io_set_destroy(e, cb);
 }
 
-pa_time_event* time_new_shim(pa_mainloop_api*a, const struct timeval *tv, pa_time_event_cb_t cb, void *userdata)
+static pa_time_event* time_new_shim(pa_mainloop_api*a, const struct timeval *tv, pa_time_event_cb_t cb, void *userdata)
 {
     DEBUG_MSG("%s called ", __func__);
     (void) a;
     return pa_mainloop_api_real->time_new(pa_mainloop_api_real, tv, cb, userdata);
 }
     
-void time_restart_shim(pa_time_event* e, const struct timeval *tv)
+static void time_restart_shim(pa_time_event* e, const struct timeval *tv)
 {
     DEBUG_MSG("%s called ", __func__);
     pa_mainloop_api_real->time_restart(e, tv);
 }
 
-void time_free_shim(pa_time_event* e)
+static void time_free_shim(pa_time_event* e)
 {
     DEBUG_MSG("%s called ", __func__);
     pa_mainloop_api_real->time_free(e);
 }
 
-void time_set_destroy_shim(pa_time_event *e, pa_time_event_destroy_cb_t cb)
+static void time_set_destroy_shim(pa_time_event *e, pa_time_event_destroy_cb_t cb)
 {
     DEBUG_MSG("%s called ", __func__);
     pa_mainloop_api_real->time_set_destroy(e, cb);
 }
 
-pa_defer_event * defer_new_shim(pa_mainloop_api * a, pa_defer_event_cb_t cb, void * userdata)
+static pa_defer_event * defer_new_shim(pa_mainloop_api * a, pa_defer_event_cb_t cb, void * userdata)
 {
     DEBUG_MSG("%s called ", __func__);
     (void) a;
     return pa_mainloop_api_real->defer_new(pa_mainloop_api_real, cb, userdata);
 }
 
-void defer_enable_shim(pa_defer_event* e, int b)
+static void defer_enable_shim(pa_defer_event* e, int b)
 {
     DEBUG_MSG("%s called ", __func__);
     pa_mainloop_api_real->defer_enable(e, b);
 }
     
-void defer_free_shim(pa_defer_event* e)
+static void defer_free_shim(pa_defer_event* e)
 {
     DEBUG_MSG("%s called ", __func__);
     pa_mainloop_api_real->defer_free(e);
 }
 
-void defer_set_destroy_shim(pa_defer_event *e, pa_defer_event_destroy_cb_t cb)
+static void defer_set_destroy_shim(pa_defer_event *e, pa_defer_event_destroy_cb_t cb)
 {
     DEBUG_MSG("%s called ", __func__);
     pa_mainloop_api_real->defer_set_destroy(e, cb);
 }
 
-void quit_shim(pa_mainloop_api*a, int retval)
+static void quit_shim(pa_mainloop_api*a, int retval)
 {
     DEBUG_MSG("%s called ", __func__);
     (void) a;
@@ -1026,15 +1271,17 @@ void pa_threaded_mainloop_wait(pa_threaded_mainloop * m)
 }
 
 /*----------------------------------------------------------------------------*/
-size_t pa_usec_to_bytes(pa_usec_t t _UNUSED, const pa_sample_spec *spec _UNUSED)
+size_t pa_usec_to_bytes(pa_usec_t t, const pa_sample_spec *spec)
 {
-    size_t retVal;
-    if(ListenMode) {
+    size_t retVal = 0;
+    if(UseRealUtilities) {
         GET_ORIGINAL(usec_to_bytes);
         retVal = orig(t, spec);
     }
     // FIXME
-//    DEBUG_MSG("%s(%lu) called, returned %lu", __func__, t, retVal);
+    if(TraceUtilities) {
+        DEBUG_MSG("%s(%lu) called, returned %lu", __func__, t, retVal);
+    }
     return retVal;
 }
 
@@ -1056,30 +1303,37 @@ size_t pa_stream_readable_size(pa_stream * p _UNUSED)
     return 0;
 }
 
+/*----------------------------------------------------------------------------*/
 size_t pa_stream_writable_size(pa_stream * p)
 {
     size_t retVal;
-    DEBUG_MSG("%s called ", __func__);
-    if(ListenMode) {
+    if(TraceStream) {
+        DEBUG_MSG("%s called ", __func__);
+    }
+    if(UseRealPulse) {
         GET_ORIGINAL(stream_writable_size);
         retVal = orig(p);
+    } else {
+        retVal = reinterpret_cast<CStream *>(p)->writable_size();
     }
-    // FIXME
     return retVal;
 }
 
+/*----------------------------------------------------------------------------*/
 int pa_stream_drop(pa_stream * p _UNUSED)
 {
     DEBUG_MSG("TODO %s called ", __func__);
     return 0;
 }
 
+/*----------------------------------------------------------------------------*/
 const pa_buffer_attr * pa_stream_get_buffer_attr(pa_stream * s _UNUSED)
 {
     DEBUG_MSG("TODO %s called ", __func__);
     return NULL;
 }
 
+/*----------------------------------------------------------------------------*/
 const char * pa_stream_get_device_name(pa_stream * s _UNUSED)
 {
     DEBUG_MSG("TODO %s called ", __func__);
@@ -1101,9 +1355,14 @@ static void context_subscribe_event_cb(pa_context *c, pa_subscription_event_type
 
 void pa_context_set_subscribe_callback(pa_context * c, pa_context_subscribe_cb_t cb, void * userdata)
 {
-    DEBUG_MSG("%s called ", __func__);
-    subscribe_event_cb_func = cb;
-    if(ListenMode) {
+    if(TraceContext) {
+        DEBUG_MSG("%s called ", __func__);
+        if(cb) {
+            subscribe_event_cb_func = cb;
+            cb = context_subscribe_event_cb;
+        }
+    }
+    if(UseRealPulse) {
         GET_ORIGINAL(context_set_subscribe_callback);
         orig(c, cb ? context_subscribe_event_cb : cb, userdata);
     } else {
@@ -1128,12 +1387,17 @@ pa_operation * pa_context_subscribe(pa_context * c,
         pa_subscription_mask_t m, pa_context_success_cb_t cb, void *userdata)
 {
     pa_operation * retVal;
-    DEBUG_MSG("%s called ", __func__);
-    DEBUG_MSG("%s", subscription_mask2str(m));
-    context_subscribe_cb_func = cb;
-    if(ListenMode) {
+    if(TraceContext) {
+        DEBUG_MSG("%s called ", __func__);
+        DEBUG_MSG("%s", subscription_mask2str(m));
+        if(cb) {
+            context_subscribe_cb_func = cb;
+            cb = context_subscribe_cb;
+        }
+    }
+    if(UseRealPulse) {
         GET_ORIGINAL(context_subscribe);
-        retVal = orig(c, m, cb ? context_subscribe_cb : cb, userdata);
+        retVal = orig(c, m, cb, userdata);
     } else {
         retVal = reinterpret_cast<CContext *>(c)->subscribe(m, cb, userdata);
     }
@@ -1158,8 +1422,10 @@ void pa_mainloop_api_once(pa_mainloop_api * m,
 {
     if(TraceMainloopApi) {
         DEBUG_MSG("%s called ", __func__);
-        callback_func = callback;
-        callback = callback ? callback_cb : callback;
+        if(callback) {
+            callback_func = callback;
+            callback = callback ? callback_cb : callback;
+        }
     }
 
     if(UseRealMainloopApi) {
