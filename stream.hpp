@@ -10,6 +10,8 @@
 
 #include "config.h"
 
+#include "ref_count.hpp"
+
 #include <alsa/asoundlib.h>
 
 #include "pulseaudio.h"
@@ -17,11 +19,13 @@
 
 class CContext;
 
-class CStream
+class CStream : public CRefCount
 {
 public:
+    static CStream * from_pa(pa_stream * s) {return reinterpret_cast<CStream *>(s);};
+    pa_stream * to_pa() {return reinterpret_cast<pa_stream *>(this);};
+
     CStream(CContext *, const char *, const pa_sample_spec *, const pa_channel_map *);
-    static void unref(CStream *);
 
     int begin_write(void ** data, size_t * nbytes);
     int write(const void *, size_t, pa_free_cb_t, off_t, pa_seek_mode_t);
@@ -34,7 +38,7 @@ public:
     pa_operation * cork(int b, pa_stream_success_cb_t cb, void * userdata);
 
     const pa_channel_map * get_channel_map();
-    uint32_t get_index();
+    uint32_t get_index() const;
     int get_latency(pa_usec_t * r_usec, int * negative);
     size_t writable_size();
     const pa_sample_spec * get_sample_spec();
@@ -47,17 +51,23 @@ public:
     int peek(const void ** data, size_t * nbytes);
 
 private:
-    ~CStream();
 
-    int test_and_set_access(snd_pcm_hw_params_t * params);
-    int test_and_set_formats(snd_pcm_hw_params_t * params);
-    int test_and_set_channels(snd_pcm_hw_params_t * params);
-    int test_and_set_rates(snd_pcm_hw_params_t * params);
+    int test_and_set_access();
+    int test_and_set_formats();
+    int test_and_set_channels();
+    int test_and_set_rates();
         
 
-    unsigned int mRefCount;
     CContext * mContext;
     snd_pcm_t * mAlsaHnd;
+    snd_pcm_hw_params_t * mParams;
+    pa_stream_request_cb_t mWrite_cb;
+    void * mWrite_userdata;
+    pa_stream_notify_cb_t mState_cb;
+    void * mState_userdata;
+
+protected:
+    virtual ~CStream();
 };
 
 #endif

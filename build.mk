@@ -19,7 +19,7 @@ LD=gcc
 LDFLAGS= -shared-libgcc -shared  -Wl,--version-script=$(SRCDIR)/exportmap
 LIBS= -ldl -lstdc++ -lpthread -lasound
 
-OBJS= shim.o logging.o originals.o pulse.o threaded_mainloop.o context.o blob.o stream.o
+OBJS= shim.o logging.o originals.o pulse.o threaded_mainloop.o context.o blob.o stream.o operation.o
 
 .PHONY: all
 all: fake_pulse.so

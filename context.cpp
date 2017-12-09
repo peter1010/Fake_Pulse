@@ -17,22 +17,8 @@ CContext::CContext(pa_mainloop_api * api, const char * name)
 {
     (void) name;
     (void) api;
-    mRefCount = 1;
     state_cb_func = NULL; 
     subscribe_cb_func = NULL; 
-}
-
-void CContext::ref() 
-{
-    mRefCount++; 
-}
-
-void CContext::unref(CContext * self)
-{
-    self->mRefCount--;
-    if(self->mRefCount <= 0) {
-        delete self;
-    }
 }
 
 CContext::~CContext()
@@ -60,7 +46,7 @@ int CContext::connect(const char * server, pa_context_flags_t flags, const pa_sp
     }
     if(state_cb_func) {
         DEBUG_MSG("Calling set context state callback");
-        mRefCount++;
+        incRef();
         state_cb_func(reinterpret_cast<pa_context *>(this), state_cb_data);
     }
     return 0;
@@ -90,7 +76,7 @@ pa_operation * CContext::get_server_info(pa_server_info_cb_t cb, void *userdata)
     info.channel_map.map[0] = PA_CHANNEL_POSITION_FRONT_LEFT;
     info.channel_map.map[1] = PA_CHANNEL_POSITION_FRONT_RIGHT;
     if(cb) {
-        mRefCount++;
+        incRef();
         cb(reinterpret_cast<pa_context *>(this), &info, userdata);
     }
     return op;
@@ -134,9 +120,9 @@ pa_operation * CContext::get_sink_info_by_name(const char * name, pa_sink_info_c
     info.formats = formats;
 
     if(cb) {
-        mRefCount++;
+        incRef();
         cb(reinterpret_cast<pa_context *>(this), &info, 0, userdata);
-        mRefCount++;
+        incRef();
         cb(reinterpret_cast<pa_context *>(this), NULL, 1, userdata);
     }
     return op;
@@ -150,7 +136,7 @@ pa_operation * CContext::set_sink_input_volume(uint32_t idx,
     (void) volume;
 
     if(cb) {
-        mRefCount++;
+        incRef();
         cb(reinterpret_cast<pa_context *>(this), 0, userdata);
     }
     return op;
@@ -160,7 +146,7 @@ pa_operation * CContext::subscribe(pa_subscription_mask_t m, pa_context_success_
 {
     (void) m;
     if(cb) {
-        mRefCount++;
+        incRef();
         cb(reinterpret_cast<pa_context *>(this), 0, userdata);
     }
     return op;

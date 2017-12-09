@@ -8,16 +8,21 @@
  * Licensed under the GPL License. See LICENSE file in the project root for full license information.  
  */
 
+#include "config.h"
+
+#include "ref_count.hpp"
+
 #include "pulseaudio.h"
 
+class CBlob;
 
-class CContext
+class CContext : public CRefCount
 {
 public:
-    CContext(pa_mainloop_api * api, const char * name);
+    static CContext * from_pa(pa_context * c) { return reinterpret_cast<CContext *>(c); };
+    pa_context * to_pa() { return reinterpret_cast<pa_context *>(this); };
 
-    void ref();
-    static void unref(CContext * self);
+    CContext(pa_mainloop_api * api, const char * name);
 
     pa_context_state_t get_state() const 
         { return PA_CONTEXT_READY; };
@@ -50,16 +55,19 @@ public:
 
     pa_operation * drain(pa_context_notify_cb_t cb, void * userdata);
 
+// internal..
+//
+    void mainloop_once(CBlob * blob);
 private:
-    ~CContext(); // Must be called indirectly via unref
     
     pa_context_notify_cb_t state_cb_func; 
     void * state_cb_data;
     
     pa_context_subscribe_cb_t subscribe_cb_func; 
     void * subscribe_cb_data;
-
-    int mRefCount;
+    
+protected:
+    virtual ~CContext(); // Must be called indirectly via unref
 };
 
 #endif

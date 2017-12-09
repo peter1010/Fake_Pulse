@@ -1,8 +1,8 @@
 /**
  *
- * Copyright (c) 2017 Peter Leese
+ * copyright (c) 2017 peter leese
  *
- * Licensed under the GPL License. See LICENSE file in the project root for full license information.  
+ * licensed under the gpl license. see license file in the project root for full license information.  
  */
 
 #include "logging.h"
@@ -15,6 +15,7 @@
 #include "context.hpp"
 #include "blob.hpp"
 #include "stream.hpp"
+#include "operation.hpp"
 
 #define _UNUSED __attribute__((unused))
 
@@ -118,7 +119,7 @@ int pa_context_connect(pa_context * c, const char * server,
         GET_ORIGINAL(context_connect);
         retVal = orig(c, server, flags, api);
     } else {
-        retVal = reinterpret_cast<CContext *>(c)->connect(server, flags, api);
+        retVal = CContext::from_pa(c)->connect(server, flags, api);
     }
     if(TraceContext) {
         DEBUG_MSG("%s returned %i", __func__, retVal);
@@ -136,7 +137,7 @@ void pa_context_disconnect(pa_context * c)
         GET_ORIGINAL(context_disconnect);
         orig(c);
     } else {
-        reinterpret_cast<CContext *>(c)->disconnect();
+        CContext::from_pa(c)->disconnect();
     }
 }
 
@@ -144,7 +145,7 @@ void pa_context_disconnect(pa_context * c)
 /**
  * Intercept the callback! 
  */
-static pa_context_notify_cb_t context_drain_cb_func = NULL;
+static pa_context_notify_cb_t context_drain_cb_func;
     
 static void context_drain_cb(pa_context * c, void * userdata)
 {
@@ -166,7 +167,7 @@ pa_operation * pa_context_drain(pa_context * c, pa_context_notify_cb_t cb, void 
         GET_ORIGINAL(context_drain);
         retVal = orig(c, cb, userdata);
     } else {
-        retVal = reinterpret_cast<CContext *>(c)->drain(cb, userdata);
+        retVal = CContext::from_pa(c)->drain(cb, userdata);
     }
     return retVal;
 }
@@ -176,7 +177,7 @@ pa_operation * pa_context_drain(pa_context * c, pa_context_notify_cb_t cb, void 
  * Intercept the callback! 
  */
 
-static pa_server_info_cb_t context_get_server_info_cb_func = NULL;
+static pa_server_info_cb_t context_get_server_info_cb_func;
 
 static void context_get_server_info_cb(pa_context *c, const pa_server_info * info, void *userdata)
 {
@@ -199,7 +200,7 @@ pa_operation * pa_context_get_server_info(pa_context *c, pa_server_info_cb_t cb,
         GET_ORIGINAL(context_get_server_info);
         retVal = orig(c, cb, userdata);
     } else {
-        retVal = reinterpret_cast<CContext *>(c)->get_server_info(cb, userdata);
+        retVal = CContext::from_pa(c)->get_server_info(cb, userdata);
     }
     return retVal;
 
@@ -210,7 +211,7 @@ pa_operation * pa_context_get_server_info(pa_context *c, pa_server_info_cb_t cb,
  * Intercept the callback! 
  */
 
-static pa_sink_info_cb_t context_get_sink_info_by_name_cb_func = NULL;
+static pa_sink_info_cb_t context_get_sink_info_by_name_cb_func;
 
 static void context_get_sink_info_by_name_cb(pa_context *c, const pa_sink_info * info, int eol, void * userdata)
 {
@@ -234,7 +235,7 @@ pa_operation * pa_context_get_sink_info_by_name(pa_context * c,
         GET_ORIGINAL(context_get_sink_info_by_name);
         retVal = orig(c, name, cb, userdata);
     } else {
-        retVal = reinterpret_cast<CContext *>(c)->get_sink_info_by_name(name, cb, userdata);
+        retVal = CContext::from_pa(c)->get_sink_info_by_name(name, cb, userdata);
     }
     return retVal;
 }
@@ -244,7 +245,7 @@ pa_operation * pa_context_get_sink_info_by_name(pa_context * c,
  * Intercept the callback! 
  */
 
-static pa_sink_info_cb_t context_get_sink_info_list_cb_func = NULL;
+static pa_sink_info_cb_t context_get_sink_info_list_cb_func;
 
 static void context_get_sink_info_list_cb(pa_context *c, const pa_sink_info * info, int eol, void * userdata)
 {
@@ -269,14 +270,14 @@ pa_operation * pa_context_get_sink_info_list(pa_context * c,
         GET_ORIGINAL(context_get_sink_info_list);
         retVal = orig(c, cb, userdata);
     } else {
-        retVal = reinterpret_cast<CContext *>(c)->get_sink_info_list(cb, userdata);
+        retVal = CContext::from_pa(c)->get_sink_info_list(cb, userdata);
     }
     return retVal;
 }
 
 /*----------------------------------------------------------------------------*/
 
-static pa_sink_input_info_cb_t context_get_sink_input_info_cb_func = NULL;
+static pa_sink_input_info_cb_t context_get_sink_input_info_cb_func;
 
 static void context_get_sink_input_info_cb(pa_context *c, const pa_sink_input_info * info, int eol, void * userdata)
 {
@@ -300,14 +301,14 @@ pa_operation * pa_context_get_sink_input_info(pa_context * c,
         GET_ORIGINAL(context_get_sink_input_info);
         retVal = orig(c, idx, cb, userdata);
     } else {
-        retVal = reinterpret_cast<CContext *>(c)->get_sink_input_info(idx, cb, userdata);
+        retVal = CContext::from_pa(c)->get_sink_input_info(idx, cb, userdata);
     }
     return retVal;
 }
 
 /*----------------------------------------------------------------------------*/
 
-static pa_source_info_cb_t context_get_source_info_list_cb_func = NULL;
+static pa_source_info_cb_t context_get_source_info_list_cb_func;
 
 static void context_get_source_info_list_cb(pa_context *c, const pa_source_info * info, int eol, void * userdata)
 {
@@ -330,7 +331,7 @@ pa_operation * pa_context_get_source_info_list(pa_context *c,
         GET_ORIGINAL(context_get_source_info_list);
         retVal = orig(c, cb, userdata);
     } else {
-        retVal = reinterpret_cast<CContext *>(c)->get_source_info_list(cb, userdata);
+        retVal = CContext::from_pa(c)->get_source_info_list(cb, userdata);
     }
     return retVal;
 }
@@ -344,7 +345,7 @@ pa_context_state_t pa_context_get_state(pa_context * c)
         GET_ORIGINAL(context_get_state);
         retVal = orig(c);
     } else {
-        retVal = reinterpret_cast<CContext *>(c)->get_state();
+        retVal = CContext::from_pa(c)->get_state();
     }
     if(TraceContext) {
         DEBUG_MSG("%s returned %s", __func__, context_state2str(retVal));
@@ -364,7 +365,7 @@ pa_context * pa_context_new(pa_mainloop_api * mainloop, const char * name)
         GET_ORIGINAL(context_new);
         c = orig(mainloop, name);
     } else {
-        c = reinterpret_cast<pa_context *>(new CContext(mainloop, name));
+        c = (new CContext(mainloop, name))->to_pa();
     }
     return c;
 }
@@ -373,7 +374,7 @@ pa_context * pa_context_new(pa_mainloop_api * mainloop, const char * name)
 /**
  * Intercept the callback! 
  */
-static pa_time_event_cb_t time_event_cb_func = NULL;
+static pa_time_event_cb_t time_event_cb_func;
 
 static void time_event_cb(pa_mainloop_api * api, pa_time_event *evt, const struct timeval * t, void * userdata)
 {
@@ -396,7 +397,7 @@ pa_time_event * pa_context_rttime_new(pa_context * c,
         GET_ORIGINAL(context_rttime_new);
         retVal = orig(c, usec, cb, userdata);
     } else {
-        retVal = reinterpret_cast<CContext *>(c)->rttime_new(usec, cb, userdata);
+        retVal = CContext::from_pa(c)->rttime_new(usec, cb, userdata);
     }
     return retVal;
 }
@@ -405,7 +406,7 @@ pa_time_event * pa_context_rttime_new(pa_context * c,
 /**
  * Intercept the callback! 
  */
-static pa_context_success_cb_t context_sink_input_volume_cb_func = NULL;
+static pa_context_success_cb_t context_sink_input_volume_cb_func;
 
 static void context_sink_input_volume_cb(pa_context * c, int v, void * userdata)
 {
@@ -428,7 +429,7 @@ pa_operation * pa_context_set_sink_input_volume(pa_context * c,
         GET_ORIGINAL(context_set_sink_input_volume);
         retVal = orig(c, idx, volume, cb, userdata);
     } else {
-        retVal = reinterpret_cast<CContext *>(c)->set_sink_input_volume(idx, volume, cb, userdata);
+        retVal = CContext::from_pa(c)->set_sink_input_volume(idx, volume, cb, userdata);
     }
     return retVal;
 }
@@ -438,7 +439,7 @@ pa_operation * pa_context_set_sink_input_volume(pa_context * c,
  * Intercept the callback! 
  */
 
-static pa_context_notify_cb_t context_state_cb_func = NULL;
+static pa_context_notify_cb_t context_state_cb_func;
 
 static void context_state_cb(pa_context *c, void * userdata)
 {
@@ -459,7 +460,7 @@ void pa_context_set_state_callback(pa_context * c, pa_context_notify_cb_t cb, vo
         GET_ORIGINAL(context_set_state_callback);
         orig(c, cb, userdata);
     } else {
-        reinterpret_cast<CContext *>(c)->set_state_callback(cb, userdata);
+        CContext::from_pa(c)->set_state_callback(cb, userdata);
     }
 }
 
@@ -476,7 +477,7 @@ pa_context * pa_context_ref(pa_context * c)
         GET_ORIGINAL(context_ref);
         retVal = orig(c);
     } else {
-        retVal = reinterpret_cast<CContext *>(c)->ref();
+        retVal = CContext::from_pa(c)->ref();
     }
     return retVal;
 }
@@ -493,7 +494,7 @@ void pa_context_unref(pa_context * c)
         GET_ORIGINAL(context_unref);
         orig(c);
     } else {
-        CContext::unref(reinterpret_cast<CContext *>(c));
+        CContext::from_pa(c)->decRef();
     }
 }
 
@@ -501,15 +502,17 @@ void pa_context_unref(pa_context * c)
 
 pa_cvolume * pa_cvolume_set(pa_cvolume * a, unsigned channels, pa_volume_t v)
 {
-    pa_cvolume * retVal = NULL;
+    pa_cvolume * retVal;
     if(TraceUtilities) {
         DEBUG_MSG("%s called ", __func__);
     }
     if(UseRealUtilities) {
         GET_ORIGINAL(cvolume_set);
         retVal = orig(a, channels, v);
+    } else {
+        retVal = NULL;
+        // FIXME
     }
-    // FIXME
     return retVal;
 }
 
@@ -517,15 +520,17 @@ pa_cvolume * pa_cvolume_set(pa_cvolume * a, unsigned channels, pa_volume_t v)
 
 pa_cvolume * pa_cvolume_set_balance(pa_cvolume * v, const pa_channel_map * map, float new_balance)
 {
-    pa_cvolume * retVal = NULL;
+    pa_cvolume * retVal;
     if(TraceUtilities) {
         DEBUG_MSG("%s called ", __func__);
     }
     if(UseRealUtilities) {
         GET_ORIGINAL(cvolume_set_balance);
         retVal = orig(v, map, new_balance);
+    } else {
+        retVal = NULL;
+        // FIXME
     }
-    // FIXME
     return retVal;
 }
 
@@ -533,12 +538,14 @@ pa_cvolume * pa_cvolume_set_balance(pa_cvolume * v, const pa_channel_map * map, 
 
 size_t pa_frame_size(const pa_sample_spec * spec)
 {
-    size_t retVal = 0;
+    size_t retVal;
     if(UseRealUtilities) {
         GET_ORIGINAL(frame_size);
         retVal = orig(spec);
+    } else {
+        retVal = 0;
+        // FIXME
     }
-    // FIXME
     if(TraceUtilities) {
         DEBUG_MSG("%s returned %lu ", __func__, retVal);
     }
@@ -554,8 +561,7 @@ pa_operation_state_t pa_operation_get_state(pa_operation *o)
         GET_ORIGINAL(operation_get_state);
         retVal = orig(o);
     } else {
-        // FIXME
-        retVal = PA_OPERATION_RUNNING;
+        retVal = COperation::from_pa(o)->get_state();
     }
     if(TraceOperation) {
         DEBUG_MSG("%s returned %s", __func__, operation_state2str(retVal));
@@ -573,8 +579,9 @@ void pa_operation_unref(pa_operation *o)
     if(UseRealPulse) {
         GET_ORIGINAL(operation_unref);
         orig(o);
+    } else {
+        COperation::from_pa(o)->decRef();
     }
-    // FIXME
 }
 
 /*----------------------------------------------------------------------------*/
@@ -614,7 +621,7 @@ int pa_stream_begin_write(pa_stream * p, void ** data, size_t * nbytes)
         GET_ORIGINAL(stream_begin_write);
         retVal = orig(p, data, nbytes);
     } else {
-        retVal = reinterpret_cast<CStream *>(p)->begin_write(data, nbytes);
+        retVal = CStream::from_pa(p)->begin_write(data, nbytes);
     }
     return retVal;
 }
@@ -631,7 +638,7 @@ int pa_stream_cancel_write(pa_stream * p)
         GET_ORIGINAL(stream_cancel_write);
         retVal = orig(p);
     } else {
-        retVal = reinterpret_cast<CStream *>(p)->cancel_write();
+        retVal = CStream::from_pa(p)->cancel_write();
     }
     return retVal;
 }
@@ -649,7 +656,7 @@ int pa_stream_connect_playback(pa_stream * s,
         GET_ORIGINAL(stream_connect_playback);
         retVal = orig(s, dev, attr, flags, volume, sync_stream);
     } else {
-        retVal = reinterpret_cast<CStream *>(s)->connect_playback(dev, attr, flags, volume, sync_stream);
+        retVal = CStream::from_pa(s)->connect_playback(dev, attr, flags, volume, sync_stream);
     }
     return retVal;
 }
@@ -681,7 +688,7 @@ pa_operation * pa_stream_cork(pa_stream * s, int b, pa_stream_success_cb_t cb, v
         GET_ORIGINAL(stream_cork);
         retVal = orig(s, b, cb, userdata);
     } else {
-        retVal = reinterpret_cast<CStream *>(s)->cork(b, cb, userdata);
+        retVal = CStream::from_pa(s)->cork(b, cb, userdata);
     }
     return retVal;
 }
@@ -698,7 +705,7 @@ int pa_stream_disconnect(pa_stream * s)
         GET_ORIGINAL(stream_disconnect);
         retVal = orig(s);
     } else {
-        retVal = reinterpret_cast<CStream *>(s)->disconnect();
+        retVal = CStream::from_pa(s)->disconnect();
     }
     return retVal;
 }
@@ -715,7 +722,7 @@ const pa_channel_map * pa_stream_get_channel_map(pa_stream * s)
         GET_ORIGINAL(stream_get_channel_map);
         retVal = orig(s);
     } else {
-        retVal = reinterpret_cast<CStream *>(s)->get_channel_map();
+        retVal = CStream::from_pa(s)->get_channel_map();
     }
     return retVal;
 }
@@ -729,7 +736,7 @@ uint32_t pa_stream_get_index(pa_stream * s)
         GET_ORIGINAL(stream_get_index);
         retVal = orig(s);
     } else {
-        retVal = reinterpret_cast<CStream *>(s)->get_index();
+        retVal = CStream::from_pa(s)->get_index();
     }
     if(TraceStream) {
         DEBUG_MSG("%s returned %u", __func__, retVal);
@@ -749,7 +756,7 @@ int pa_stream_get_latency(pa_stream * s, pa_usec_t * r_usec, int * negative)
         GET_ORIGINAL(stream_get_latency);
         retVal = orig(s, r_usec, negative);
     } else {
-        retVal = reinterpret_cast<CStream *>(s)->get_latency(r_usec, negative);
+        retVal = CStream::from_pa(s)->get_latency(r_usec, negative);
     }
     return retVal;
 }
@@ -766,7 +773,7 @@ const pa_sample_spec * pa_stream_get_sample_spec(pa_stream * s)
         GET_ORIGINAL(stream_get_sample_spec);
         retVal = orig(s);
     } else {
-        retVal = reinterpret_cast<CStream *>(s)->get_sample_spec();
+        retVal = CStream::from_pa(s)->get_sample_spec();
     }
     return retVal;
 }
@@ -783,7 +790,7 @@ pa_stream_state_t pa_stream_get_state(pa_stream * p)
         GET_ORIGINAL(stream_get_state);
         retVal = orig(p);
     } else {
-        retVal = reinterpret_cast<CStream *>(p)->get_state();
+        retVal = CStream::from_pa(p)->get_state();
     }
     return retVal;
 }
@@ -800,7 +807,7 @@ int pa_stream_get_time(pa_stream * s, pa_usec_t * r_usec)
         GET_ORIGINAL(stream_get_time);
         retVal = orig(s, r_usec);
     } else {
-        retVal = reinterpret_cast<CStream *>(s)->get_time(r_usec);
+        retVal = CStream::from_pa(s)->get_time(r_usec);
     }
     return retVal;
 }
@@ -817,7 +824,7 @@ pa_stream * pa_stream_new(pa_context * c, const char * name, const pa_sample_spe
         GET_ORIGINAL(stream_new);
         retVal = orig(c, name, ss, map);
     } else {
-        retVal = reinterpret_cast<pa_stream *>(new CStream(reinterpret_cast<CContext *>(c), name, ss, map));
+        retVal = (new CStream(CContext::from_pa(c), name, ss, map))->to_pa();
     }
     return retVal;
 }
@@ -834,7 +841,7 @@ int pa_stream_peek(pa_stream * p _UNUSED, const void **data _UNUSED, size_t *nby
         GET_ORIGINAL(stream_peek);
         retVal = orig(p, data, nbytes);
     } else {
-        retVal = reinterpret_cast<CStream *>(p)->peek(data, nbytes);
+        retVal = CStream::from_pa(p)->peek(data, nbytes);
     }
     return retVal;
 }
@@ -844,7 +851,7 @@ int pa_stream_peek(pa_stream * p _UNUSED, const void **data _UNUSED, size_t *nby
  * Intercept the callback! 
  */
 
-static pa_stream_notify_cb_t stream_state_cb_func = NULL;
+static pa_stream_notify_cb_t stream_state_cb_func;
 
 static void stream_state_cb(pa_stream * s, void * userdata)
 {
@@ -865,7 +872,7 @@ void pa_stream_set_state_callback(pa_stream * s, pa_stream_notify_cb_t cb, void 
         GET_ORIGINAL(stream_set_state_callback);
         orig(s, cb, userdata);
     } else {
-        reinterpret_cast<CStream *>(s)->set_state_callback(cb, userdata);
+        CStream::from_pa(s)->set_state_callback(cb, userdata);
     }
 }
 
@@ -873,7 +880,7 @@ void pa_stream_set_state_callback(pa_stream * s, pa_stream_notify_cb_t cb, void 
 /**
  * Intercept the callback! 
  */
-static pa_stream_request_cb_t stream_write_cb_func = NULL;
+static pa_stream_request_cb_t stream_write_cb_func;
 
 static void stream_write_cb(pa_stream * p, size_t nbytes, void * userdata)
 {
@@ -895,7 +902,7 @@ void pa_stream_set_write_callback(pa_stream * p, pa_stream_request_cb_t cb, void
         GET_ORIGINAL(stream_set_write_callback);
         orig(p, cb, userdata);
     } else {
-        reinterpret_cast<CStream *>(p)->set_write_callback(cb, userdata);
+        CStream::from_pa(p)->set_write_callback(cb, userdata);
     }
 }
 
@@ -910,7 +917,7 @@ void pa_stream_unref(pa_stream * s)
         GET_ORIGINAL(stream_unref);
         orig(s);
     } else {
-        CStream::unref(reinterpret_cast<CStream *>(s));
+        CStream::from_pa(s)->decRef();
     }
 }
 
@@ -918,7 +925,7 @@ void pa_stream_unref(pa_stream * s)
 /**
  * Intercept the callback! 
  */
-static pa_stream_success_cb_t stream_update_timing_cb_func = NULL;
+static pa_stream_success_cb_t stream_update_timing_cb_func;
 
 static void stream_update_timing_cb(pa_stream * p, int t, void * userdata)
 {
@@ -940,7 +947,7 @@ pa_operation * pa_stream_update_timing_info(pa_stream * p, pa_stream_success_cb_
         GET_ORIGINAL(stream_update_timing_info);
         retVal = orig(p, cb, userdata);
     } else {
-        retVal = reinterpret_cast<CStream *>(p)->update_timing_info(cb, userdata);
+        retVal = CStream::from_pa(p)->update_timing_info(cb, userdata);
     }
     return retVal;
 }
@@ -950,7 +957,7 @@ pa_operation * pa_stream_update_timing_info(pa_stream * p, pa_stream_success_cb_
  * Intercept the callback! 
  */
 
-static pa_free_cb_t write_free_cb_func = NULL;
+static pa_free_cb_t write_free_cb_func;
 
 static void write_free_cb(void * data)
 {
@@ -973,7 +980,7 @@ int pa_stream_write(pa_stream * p,
         GET_ORIGINAL(stream_write);
         retVal = orig(p, data, nbytes, free_cb ? write_free_cb : free_cb, offset, seek);
     } else {
-        retVal = reinterpret_cast<CStream *>(p)->write(data, nbytes, free_cb, offset, seek);
+        retVal = CStream::from_pa(p)->write(data, nbytes, free_cb, offset, seek);
     }
     return retVal;
 }
@@ -982,15 +989,17 @@ int pa_stream_write(pa_stream * p,
 
 pa_volume_t pa_sw_volume_from_linear(double v)
 {
-    pa_volume_t retVal = 0;
+    pa_volume_t retVal;
     if(TraceUtilities) {
         DEBUG_MSG("%s called ", __func__);
     }
     if(UseRealUtilities) {
         GET_ORIGINAL(sw_volume_from_linear);
         retVal = orig(v);
+    } else {
+        retVal = 0;
+        // FIXME
     }
-    // FIXME
     return retVal;
 }
 
@@ -1012,7 +1021,7 @@ void pa_threaded_mainloop_free(pa_threaded_mainloop* m)
 
 /*----------------------------------------------------------------------------*/
 
-static struct pa_mainloop_api * pa_mainloop_api_real = NULL;
+static struct pa_mainloop_api * pa_mainloop_api_real;
 
 static pa_io_event* io_new_shim(pa_mainloop_api*a, int fd, pa_io_event_flags_t events, pa_io_event_cb_t cb, void *userdata)
 {
@@ -1273,12 +1282,14 @@ void pa_threaded_mainloop_wait(pa_threaded_mainloop * m)
 /*----------------------------------------------------------------------------*/
 size_t pa_usec_to_bytes(pa_usec_t t, const pa_sample_spec *spec)
 {
-    size_t retVal = 0;
+    size_t retVal;
     if(UseRealUtilities) {
         GET_ORIGINAL(usec_to_bytes);
         retVal = orig(t, spec);
+    } else {
+        retVal = 0;
+        // FIXME
     }
-    // FIXME
     if(TraceUtilities) {
         DEBUG_MSG("%s(%lu) called, returned %lu", __func__, t, retVal);
     }
@@ -1314,7 +1325,7 @@ size_t pa_stream_writable_size(pa_stream * p)
         GET_ORIGINAL(stream_writable_size);
         retVal = orig(p);
     } else {
-        retVal = reinterpret_cast<CStream *>(p)->writable_size();
+        retVal = CStream::from_pa(p)->writable_size();
     }
     return retVal;
 }
@@ -1345,7 +1356,7 @@ const char * pa_stream_get_device_name(pa_stream * s _UNUSED)
  * Intercept the callback! 
  */
 
-static pa_context_subscribe_cb_t subscribe_event_cb_func = NULL;
+static pa_context_subscribe_cb_t subscribe_event_cb_func;
 
 static void context_subscribe_event_cb(pa_context *c, pa_subscription_event_type_t event, uint32_t x, void * userdata)
 {
@@ -1366,7 +1377,7 @@ void pa_context_set_subscribe_callback(pa_context * c, pa_context_subscribe_cb_t
         GET_ORIGINAL(context_set_subscribe_callback);
         orig(c, cb ? context_subscribe_event_cb : cb, userdata);
     } else {
-        reinterpret_cast<CContext *>(c)->set_subscribe_callback(cb, userdata);
+        CContext::from_pa(c)->set_subscribe_callback(cb, userdata);
     }
 }
 
@@ -1374,7 +1385,7 @@ void pa_context_set_subscribe_callback(pa_context * c, pa_context_subscribe_cb_t
 /**
  * Intercept the callback! 
  */
-static pa_context_success_cb_t context_subscribe_cb_func = NULL;
+static pa_context_success_cb_t context_subscribe_cb_func;
 
 static void context_subscribe_cb(pa_context * c, int v, void * userdata)
 {
@@ -1399,7 +1410,7 @@ pa_operation * pa_context_subscribe(pa_context * c,
         GET_ORIGINAL(context_subscribe);
         retVal = orig(c, m, cb, userdata);
     } else {
-        retVal = reinterpret_cast<CContext *>(c)->subscribe(m, cb, userdata);
+        retVal = CContext::from_pa(c)->subscribe(m, cb, userdata);
     }
     return retVal;
 }
@@ -1409,7 +1420,7 @@ pa_operation * pa_context_subscribe(pa_context * c,
  * Intercept the callback! 
  */
 
-void (*callback_func)(pa_mainloop_api*, void *) = NULL;
+void (*callback_func)(pa_mainloop_api*, void *);
 
 static void callback_cb(pa_mainloop_api *m, void * userdata)
 {
@@ -1432,7 +1443,7 @@ void pa_mainloop_api_once(pa_mainloop_api * m,
         GET_ORIGINAL(mainloop_api_once);
         orig(m, callback, userdata);
     } else {
-        CBlob * blob = new CBlob(callback, userdata);
+        CBlob * blob = new CMainloopApiOnce(callback, userdata);
         pa_defer_event * evt = m->defer_new(m, blob->callback, blob);
         m->defer_set_destroy(evt, blob->free);
     }
