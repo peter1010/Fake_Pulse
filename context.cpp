@@ -9,16 +9,52 @@
 
 #include "context.hpp"
 #include "logging.h"
+#include "operation.hpp"
+#include "blob.hpp"
 
-static pa_operation * op;
 
+pa_sink_info CContext::mInfo;
 
 CContext::CContext(pa_mainloop_api * api, const char * name)
 {
+    static pa_format_info format = {PA_ENCODING_PCM, NULL};
+    static pa_format_info * formats[1] = {&format};
+
     (void) name;
     (void) api;
     state_cb_func = NULL; 
     subscribe_cb_func = NULL; 
+
+    mInfo.name = name;
+    mInfo.index = 1;
+    mInfo.description = "output";
+    mInfo.sample_spec.format = PA_SAMPLE_S16LE;
+    mInfo.sample_spec.rate = 44100;
+    mInfo.sample_spec.channels = 2;
+    mInfo.channel_map.channels =2;
+    mInfo.channel_map.map[0] = PA_CHANNEL_POSITION_FRONT_LEFT;
+    mInfo.channel_map.map[1] = PA_CHANNEL_POSITION_FRONT_RIGHT;
+    mInfo.owner_module = 1;
+    mInfo.volume.channels = 2;
+    mInfo.volume.values[0] = 100;
+    mInfo.volume.values[1] = 100;
+    mInfo.mute = 0;
+    mInfo.monitor_source = 0;
+    mInfo.monitor_source_name = "";
+    mInfo.latency = 1000;
+    mInfo.driver = "alsa";
+    mInfo.flags = PA_SINK_HARDWARE;
+    mInfo.proplist = NULL;
+    mInfo.configured_latency = 1000;
+    mInfo.base_volume = 50;
+    mInfo.state = PA_SINK_IDLE;
+    mInfo.n_volume_steps = 1;
+    mInfo.card =  1;
+    mInfo.n_ports = 0; 
+    mInfo.ports = NULL;
+    mInfo.active_port = NULL;
+    mInfo.n_formats = 1;
+    mInfo.formats = formats;
 }
 
 CContext::~CContext()
@@ -77,55 +113,20 @@ pa_operation * CContext::get_server_info(pa_server_info_cb_t cb, void *userdata)
     info.channel_map.map[1] = PA_CHANNEL_POSITION_FRONT_RIGHT;
     if(cb) {
         incRef();
-        cb(reinterpret_cast<pa_context *>(this), &info, userdata);
+        mainloop_once(new CServerInfoCb(cb, to_pa(), &info, userdata));
     }
-    return op;
+    return (new COperation())->to_pa();
 }
 
 pa_operation * CContext::get_sink_info_by_name(const char * name, pa_sink_info_cb_t cb, void * userdata)
 {
-    static pa_sink_info info;
-    static pa_format_info format = {PA_ENCODING_PCM, NULL};
-    static pa_format_info * formats[1] = {&format};
-
-    info.name = name;
-    info.index = 1;
-    info.description = "output";
-    info.sample_spec.format = PA_SAMPLE_S16LE;
-    info.sample_spec.rate = 44100;
-    info.sample_spec.channels = 2;
-    info.channel_map.channels =2;
-    info.channel_map.map[0] = PA_CHANNEL_POSITION_FRONT_LEFT;
-    info.channel_map.map[1] = PA_CHANNEL_POSITION_FRONT_RIGHT;
-    info.owner_module = 1;
-    info.volume.channels = 2;
-    info.volume.values[0] = 100;
-    info.volume.values[1] = 100;
-    info.mute = 0;
-    info.monitor_source = 0;
-    info.monitor_source_name = "";
-    info.latency = 1000;
-    info.driver = "alsa";
-    info.flags = PA_SINK_HARDWARE;
-    info.proplist = NULL;
-    info.configured_latency = 1000;
-    info.base_volume = 50;
-    info.state = PA_SINK_IDLE;
-    info.n_volume_steps = 1;
-    info.card =  1;
-    info.n_ports = 0; 
-    info.ports = NULL;
-    info.active_port = NULL;
-    info.n_formats = 1;
-    info.formats = formats;
-
     if(cb) {
         incRef();
-        cb(reinterpret_cast<pa_context *>(this), &info, 0, userdata);
+        mainloop_once(new CSinkInfoCb(cb, to_pa(), &mInfo, userdata));
         incRef();
-        cb(reinterpret_cast<pa_context *>(this), NULL, 1, userdata);
+        mainloop_once(new CSinkInfoCb(cb, to_pa(), NULL, userdata));
     }
-    return op;
+    return (new COperation())->to_pa();
 }
 
 
@@ -139,7 +140,7 @@ pa_operation * CContext::set_sink_input_volume(uint32_t idx,
         incRef();
         cb(reinterpret_cast<pa_context *>(this), 0, userdata);
     }
-    return op;
+    return (new COperation())->to_pa();
 }
 
 pa_operation * CContext::subscribe(pa_subscription_mask_t m, pa_context_success_cb_t cb, void *userdata)
@@ -149,7 +150,7 @@ pa_operation * CContext::subscribe(pa_subscription_mask_t m, pa_context_success_
         incRef();
         cb(reinterpret_cast<pa_context *>(this), 0, userdata);
     }
-    return op;
+    return (new COperation())->to_pa();
 }
 
 pa_time_event * CContext::rttime_new(pa_usec_t usec, pa_time_event_cb_t cb, void *userdata)
@@ -168,16 +169,26 @@ void CContext::disconnect()
 
 pa_operation * CContext::get_sink_info_list(pa_sink_info_cb_t cb, void * userdata)
 {
+    if(cb) {
+        incRef();
+        mainloop_once(new CSinkInfoCb(cb, to_pa(), &mInfo, userdata));
+        incRef();
+        mainloop_once(new CSinkInfoCb(cb, to_pa(), NULL, userdata));
+    }
+    return (new COperation())->to_pa();
 }
 
 pa_operation * CContext::get_source_info_list(pa_source_info_cb_t cb, void * userdata)
 {
+    return (new COperation())->to_pa();
 }
 
 pa_operation * CContext::drain(pa_context_notify_cb_t cb, void * userdata)
 {
+    return (new COperation())->to_pa();
 }
 
 pa_operation * CContext::get_sink_input_info(uint32_t idx, pa_sink_input_info_cb_t cb, void *userdata)
 {
+    return (new COperation())->to_pa();
 }

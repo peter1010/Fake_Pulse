@@ -59,7 +59,8 @@ public:
 //
     void mainloop_once(CBlob * blob);
 private:
-    
+    static pa_sink_info mInfo;
+
     pa_context_notify_cb_t state_cb_func; 
     void * state_cb_data;
     

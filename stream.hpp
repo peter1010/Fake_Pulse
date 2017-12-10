@@ -53,16 +53,20 @@ public:
 private:
 
     int test_and_set_access();
-    int test_and_set_formats();
-    int test_and_set_channels();
-    int test_and_set_rates();
+    int test_and_set_format();
+    int test_and_set_channel();
+    int test_and_set_rate();
         
 
     CContext * mContext;
     snd_pcm_t * mAlsaHnd;
     snd_pcm_hw_params_t * mParams;
+    pa_sample_spec mSpec;
+    pa_channel_map mMap;
+
     pa_stream_request_cb_t mWrite_cb;
     void * mWrite_userdata;
+
     pa_stream_notify_cb_t mState_cb;
     void * mState_userdata;
 

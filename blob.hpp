@@ -51,3 +51,40 @@ private:
 protected:
     virtual ~CStreamSuccessCb() {};
 };
+
+
+class CServerInfoCb : public CBlob
+{
+public:
+    CServerInfoCb(pa_server_info_cb_t cb, pa_context * c, pa_server_info * in, void * ud)
+        : mCallback(cb), mContext(c), mInfo(in), mUserdata(ud) {};
+
+    virtual void doCallback(pa_mainloop_api * mainloop) { (void)mainloop; mCallback(mContext, mInfo, mUserdata); };
+private:
+    pa_server_info_cb_t mCallback;
+    pa_context * mContext;
+    pa_server_info * mInfo;
+    void * mUserdata;
+
+protected:
+    virtual ~CServerInfoCb() {};
+};
+ 
+class CSinkInfoCb : public CBlob
+{
+public:
+     CSinkInfoCb(pa_sink_info_cb_t cb, pa_context * c, pa_sink_info * in, void * ud)
+        : mCallback(cb), mContext(c), mInfo(in), mUserdata(ud) {};
+
+     virtual void doCallback(pa_mainloop_api * mainloop) { (void)mainloop; mCallback(mContext, mInfo, mInfo ? 0:1, mUserdata); };
+private:
+    pa_sink_info_cb_t mCallback;
+    pa_context * mContext;
+    pa_sink_info * mInfo;
+    void * mUserdata;
+
+protected:
+    virtual ~CSinkInfoCb() {};
+};
+ 
+
