@@ -61,6 +61,8 @@ public:
 private:
     static pa_sink_info mInfo;
 
+    pa_mainloop_api * mMainloopApi;
+
     pa_context_notify_cb_t state_cb_func; 
     void * state_cb_data;
     

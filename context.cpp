@@ -21,11 +21,11 @@ CContext::CContext(pa_mainloop_api * api, const char * name)
     static pa_format_info * formats[1] = {&format};
 
     (void) name;
-    (void) api;
+    mMainloopApi = api;
     state_cb_func = NULL; 
     subscribe_cb_func = NULL; 
 
-    mInfo.name = name;
+    mInfo.name = "sink";
     mInfo.index = 1;
     mInfo.description = "output";
     mInfo.sample_spec.format = PA_SAMPLE_S16LE;
@@ -83,7 +83,7 @@ int CContext::connect(const char * server, pa_context_flags_t flags, const pa_sp
     if(state_cb_func) {
         DEBUG_MSG("Calling set context state callback");
         incRef();
-        state_cb_func(reinterpret_cast<pa_context *>(this), state_cb_data);
+        mainloop_once(new CContextNotifyCb(state_cb_func, to_pa(), state_cb_data));
     }
     return 0;
 }
@@ -120,6 +120,8 @@ pa_operation * CContext::get_server_info(pa_server_info_cb_t cb, void *userdata)
 
 pa_operation * CContext::get_sink_info_by_name(const char * name, pa_sink_info_cb_t cb, void * userdata)
 {
+    (void)name;
+
     if(cb) {
         incRef();
         mainloop_once(new CSinkInfoCb(cb, to_pa(), &mInfo, userdata));
@@ -138,7 +140,7 @@ pa_operation * CContext::set_sink_input_volume(uint32_t idx,
 
     if(cb) {
         incRef();
-        cb(reinterpret_cast<pa_context *>(this), 0, userdata);
+        mainloop_once(new CContextSuccessCb(cb, to_pa(), 0, userdata));
     }
     return (new COperation())->to_pa();
 }
@@ -146,21 +148,25 @@ pa_operation * CContext::set_sink_input_volume(uint32_t idx,
 pa_operation * CContext::subscribe(pa_subscription_mask_t m, pa_context_success_cb_t cb, void *userdata)
 {
     (void) m;
+    // FIXME
     if(cb) {
         incRef();
-        cb(reinterpret_cast<pa_context *>(this), 0, userdata);
+        mainloop_once(new CContextSuccessCb(cb, to_pa(), 0, userdata));
     }
     return (new COperation())->to_pa();
 }
 
+/**
+ * Wrapper for mainloop->time_new
+ */
 pa_time_event * CContext::rttime_new(pa_usec_t usec, pa_time_event_cb_t cb, void *userdata)
 {
-    (void) usec;
-    if(cb) {
-        // FIXME
-        //cb(pa_mainloop_api * api, pa_time_event *evt, const struct timeval * t, void * userdata)
-    }
-    return NULL;
+    const struct timeval tv = 
+    {
+        static_cast<time_t>(usec/1000000),
+        static_cast<suseconds_t>(usec % 1000000)
+    };
+    return mMainloopApi->time_new(mMainloopApi, &tv, cb, userdata);
 }
 
 void CContext::disconnect()
@@ -180,15 +186,34 @@ pa_operation * CContext::get_sink_info_list(pa_sink_info_cb_t cb, void * userdat
 
 pa_operation * CContext::get_source_info_list(pa_source_info_cb_t cb, void * userdata)
 {
+    (void) cb;
+    (void) userdata;
+    // FIXME
+
     return (new COperation())->to_pa();
 }
 
 pa_operation * CContext::drain(pa_context_notify_cb_t cb, void * userdata)
 {
+    if(cb) {
+        incRef();
+        mainloop_once(new CContextNotifyCb(cb, to_pa(), userdata));
+    }
     return (new COperation())->to_pa();
 }
 
 pa_operation * CContext::get_sink_input_info(uint32_t idx, pa_sink_input_info_cb_t cb, void *userdata)
 {
+    (void) idx;
+    (void) cb;
+    (void) userdata;
+    // FIXME
     return (new COperation())->to_pa();
 }
+
+void CContext::mainloop_once(CBlob * blob)
+{
+    pa_defer_event * evt = mMainloopApi->defer_new(mMainloopApi, blob->callback, blob);
+    mMainloopApi->defer_set_destroy(evt, blob->free);
+}
+ 

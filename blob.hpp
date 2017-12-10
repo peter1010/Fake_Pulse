@@ -1,3 +1,14 @@
+#ifndef _BLOB_HPP_
+#define _BLOB_HPP_
+
+/**
+ *
+ * Copyright (c) 2017 Peter Leese
+ *
+ * Licensed under the GPL License. See LICENSE file in the project root for full license information.  
+ */
+
+#include "config.h"
 
 #include "pulseaudio.h"
 
@@ -26,7 +37,6 @@ public:
 
 private:
     void (*mCallback)(pa_mainloop_api *, void *); 
-    pa_mainloop_api * mMainloop;
     void * mUserdata;
 
 protected:
@@ -86,5 +96,43 @@ private:
 protected:
     virtual ~CSinkInfoCb() {};
 };
- 
 
+
+class CContextSuccessCb : public CBlob
+{
+public:
+    CContextSuccessCb(pa_context_success_cb_t cb, pa_context * c, int su, void * ud)
+        : mCallback(cb), mContext(c), mSuccess(su), mUserdata(ud) {};
+
+    virtual void doCallback(pa_mainloop_api * mainloop) { (void)mainloop; mCallback(mContext, mSuccess, mUserdata); };
+
+private:
+    pa_context_success_cb_t mCallback;
+    pa_context * mContext;
+    int mSuccess;
+    void * mUserdata;
+
+protected:
+    virtual ~CContextSuccessCb() {};
+};
+
+class CContextNotifyCb : public CBlob
+{
+public:
+    CContextNotifyCb(pa_context_notify_cb_t cb, pa_context * c, void * ud)
+        : mCallback(cb), mContext(c), mUserdata(ud) {};
+
+    virtual void doCallback(pa_mainloop_api * mainloop) { (void)mainloop; mCallback(mContext, mUserdata); };
+
+private:
+    pa_context_notify_cb_t mCallback;
+    pa_context * mContext;
+    void * mUserdata;
+
+protected:
+    virtual ~CContextNotifyCb() {};
+};
+
+
+
+#endif
