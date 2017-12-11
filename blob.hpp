@@ -26,7 +26,10 @@ protected:
     virtual ~CBlob() = 0;
 };
 
+// Either a pure virtual destructor needs an implementation.
+inline CBlob::~CBlob() {};
 
+/*----------------------------------------------------------------------------*/
 class CMainloopApiOnce : public CBlob
 {
 public:
@@ -44,6 +47,7 @@ protected:
 };
 
 
+/*----------------------------------------------------------------------------*/
 class CStreamSuccessCb : public CBlob
 {
 public:
@@ -63,6 +67,27 @@ protected:
 };
 
 
+/*----------------------------------------------------------------------------*/
+class CStreamRequestCb : public CBlob
+{
+public:
+    CStreamRequestCb(pa_stream_request_cb_t cb, pa_stream * st, size_t b, void * ud)
+        : mCallback(cb), mStream(st), mBytes(b), mUserdata(ud) {};
+
+    virtual void doCallback(pa_mainloop_api * mainloop) { (void)mainloop; mCallback(mStream, mBytes, mUserdata); };
+
+private:
+    pa_stream_request_cb_t mCallback;
+    pa_stream * mStream;
+    size_t mBytes;
+    void * mUserdata;
+
+protected:
+    virtual ~CStreamRequestCb() {};
+};
+
+
+/*----------------------------------------------------------------------------*/
 class CServerInfoCb : public CBlob
 {
 public:
@@ -80,6 +105,7 @@ protected:
     virtual ~CServerInfoCb() {};
 };
  
+/*----------------------------------------------------------------------------*/
 class CSinkInfoCb : public CBlob
 {
 public:
@@ -98,6 +124,7 @@ protected:
 };
 
 
+/*----------------------------------------------------------------------------*/
 class CContextSuccessCb : public CBlob
 {
 public:
@@ -116,6 +143,7 @@ protected:
     virtual ~CContextSuccessCb() {};
 };
 
+/*----------------------------------------------------------------------------*/
 class CContextNotifyCb : public CBlob
 {
 public:

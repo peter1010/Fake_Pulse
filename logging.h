@@ -33,6 +33,8 @@ extern const char * context_state2str(pa_context_state_t state);
 
 const char * operation_state2str(pa_operation_state_t state);
 
+const char * stream_state2str(pa_stream_state_t state);
+
 const char * subscription_mask2str(pa_subscription_mask_t m);
 
 #ifdef __cplusplus

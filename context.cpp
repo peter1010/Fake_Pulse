@@ -81,7 +81,7 @@ int CContext::connect(const char * server, pa_context_flags_t flags, const pa_sp
         }
     }
     if(state_cb_func) {
-        DEBUG_MSG("Calling set context state callback");
+        DEBUG_MSG("Queuing \'set context state callback\'");
         incRef();
         mainloop_once(new CContextNotifyCb(state_cb_func, to_pa(), state_cb_data));
     }
@@ -140,7 +140,7 @@ pa_operation * CContext::set_sink_input_volume(uint32_t idx,
 
     if(cb) {
         incRef();
-        mainloop_once(new CContextSuccessCb(cb, to_pa(), 0, userdata));
+        mainloop_once(new CContextSuccessCb(cb, to_pa(), 1, userdata));
     }
     return (new COperation())->to_pa();
 }
@@ -151,7 +151,7 @@ pa_operation * CContext::subscribe(pa_subscription_mask_t m, pa_context_success_
     // FIXME
     if(cb) {
         incRef();
-        mainloop_once(new CContextSuccessCb(cb, to_pa(), 0, userdata));
+        mainloop_once(new CContextSuccessCb(cb, to_pa(), 1, userdata));
     }
     return (new COperation())->to_pa();
 }

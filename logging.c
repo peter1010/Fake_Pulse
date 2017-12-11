@@ -205,6 +205,20 @@ const char * operation_state2str(pa_operation_state_t state)
     return str;
 }
 
+const char * stream_state2str(pa_stream_state_t state)
+{
+    const char * str = "UNKNOWN";
+    switch(state) {
+        case PA_STREAM_UNCONNECTED : str = "UNCONNECTED"; break;
+        case PA_STREAM_CREATING : str = "CREATING"; break;
+        case PA_STREAM_READY : str = "READY"; break;
+        case PA_STREAM_FAILED : str = "FAILED"; break;
+        case PA_STREAM_TERMINATED : str = "TERMINATED"; break;
+    }
+    return str;
+}
+ 
+
 const char * subscription_mask2str(pa_subscription_mask_t m)
 {
     static char buf[100];

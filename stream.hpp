@@ -52,6 +52,7 @@ public:
 
 private:
 
+    int setup_alsa(bool toTest);
     int test_and_set_access();
     int test_and_set_format();
     int test_and_set_channel();

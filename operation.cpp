@@ -11,4 +11,4 @@
 pa_operation_state_t COperation::get_state() const 
 {
     return PA_OPERATION_DONE; 
-};
+}

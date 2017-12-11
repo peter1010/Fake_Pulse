@@ -30,16 +30,16 @@ bool UseRealThreadedMainloop = false;
 #define UseRealThreadedMainloop true
 #endif
 bool UseRealMainloopApi = true;
-bool UseRealPulse = true;
+bool UseRealPulse = false;
 bool UseRealUtilities = true;
 
 
-bool TraceThreadedMainLoop = true;
+bool TraceThreadedMainLoop = false;
 bool TraceMainloopApi = false;
 bool TraceContext = true;
 bool TraceStream = true;
-bool TraceUtilities = true;
-bool TraceOperation = true;
+bool TraceUtilities = false;
+bool TraceOperation = false;
 
 /*----------------------------------------------------------------------------*/
 const char * pa_get_library_version(void)
@@ -574,13 +574,16 @@ pa_operation_state_t pa_operation_get_state(pa_operation *o)
 void pa_operation_unref(pa_operation *o)
 {
     if(TraceOperation) {
-        DEBUG_MSG("%s called ", __func__);
+        DEBUG_MSG("%s(%p) called ", __func__, o);
     }
     if(UseRealPulse) {
         GET_ORIGINAL(operation_unref);
         orig(o);
     } else {
         COperation::from_pa(o)->decRef();
+    }
+    if(TraceOperation) {
+        DEBUG_MSG("%s returned ", __func__);
     }
 }
 
@@ -783,14 +786,14 @@ const pa_sample_spec * pa_stream_get_sample_spec(pa_stream * s)
 pa_stream_state_t pa_stream_get_state(pa_stream * p)
 {
     pa_stream_state_t retVal;
-    if(TraceStream) {
-        DEBUG_MSG("%s called ", __func__);
-    }
     if(UseRealPulse) {
         GET_ORIGINAL(stream_get_state);
         retVal = orig(p);
     } else {
         retVal = CStream::from_pa(p)->get_state();
+    }
+    if(TraceStream) {
+        DEBUG_MSG("%s returned %s", __func__, stream_state2str(retVal));
     }
     return retVal;
 }
@@ -800,14 +803,21 @@ pa_stream_state_t pa_stream_get_state(pa_stream * p)
 int pa_stream_get_time(pa_stream * s, pa_usec_t * r_usec)
 {
     int retVal;
-    if(TraceStream) {
-        DEBUG_MSG("%s called ", __func__);
-    }
     if(UseRealPulse) {
         GET_ORIGINAL(stream_get_time);
         retVal = orig(s, r_usec);
     } else {
-        retVal = CStream::from_pa(s)->get_time(r_usec);
+        if(UseRealUtilities) {
+            GET_ORIGINAL(rtclock_now);
+            *r_usec = orig();
+            retVal = 0;
+        } else {
+            retVal = 0;
+        }
+        // retVal = CStream::from_pa(s)->get_time(r_usec);
+    }
+    if(TraceStream) {
+        DEBUG_MSG("%s returned %lu", __func__, *r_usec);
     }
     return retVal;
 }
@@ -1318,14 +1328,14 @@ size_t pa_stream_readable_size(pa_stream * p _UNUSED)
 size_t pa_stream_writable_size(pa_stream * p)
 {
     size_t retVal;
-    if(TraceStream) {
-        DEBUG_MSG("%s called ", __func__);
-    }
     if(UseRealPulse) {
         GET_ORIGINAL(stream_writable_size);
         retVal = orig(p);
     } else {
         retVal = CStream::from_pa(p)->writable_size();
+    }
+    if(TraceStream) {
+        DEBUG_MSG("%s returned %lu", __func__, retVal);
     }
     return retVal;
 }
