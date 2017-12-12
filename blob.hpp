@@ -86,6 +86,25 @@ protected:
     virtual ~CStreamRequestCb() {};
 };
 
+/*----------------------------------------------------------------------------*/
+class CStreamNotifyCb : public CBlob
+{
+public:
+    CStreamNotifyCb(pa_stream_notify_cb_t cb, pa_stream * s, void * ud)
+        : mCallback(cb), mStream(s), mUserdata(ud) {};
+
+    virtual void doCallback(pa_mainloop_api * mainloop) { (void)mainloop; mCallback(mStream, mUserdata); };
+
+private:
+    pa_stream_notify_cb_t mCallback;
+    pa_stream * mStream;
+    void * mUserdata;
+
+protected:
+    virtual ~CStreamNotifyCb() {};
+};
+
+
 
 /*----------------------------------------------------------------------------*/
 class CServerInfoCb : public CBlob

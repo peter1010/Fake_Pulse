@@ -283,7 +283,9 @@ CStream::CStream(CContext * context, const char * name,
 
     mContext = context;
     mAlsaHnd = NULL;
-    mParams = NULL;
+    mState = PA_STREAM_UNCONNECTED;
+    mCheckedSetup = false;
+
     if(desired_sample_spec) {
         mSpec = *desired_sample_spec;
     } else {
@@ -305,10 +307,6 @@ CStream::CStream(CContext * context, const char * name,
 CStream::~CStream()
 {
     disconnect();
-    if(mParams) {
-        snd_pcm_hw_params_free(mParams);
-        mParams = NULL;
-    }
 }
 
 int CStream::begin_write(void **data,  size_t *nbytes)
@@ -331,23 +329,22 @@ int CStream::connect_playback(const char * dev, const pa_buffer_attr * attr, pa_
     (void) volume;
     (void) sync_stream;
 
-    int rc = setup_alsa(false);
-    if(rc < 0) {
-        disconnect();
-    } else {
-        snd_pcm_prepare(mAlsaHnd);
-        snd_pcm_start(mAlsaHnd);
-    }
+    disconnect();
+    const int rc = setup_alsa(false);
     return rc < 0 ? 1 : 0;
 }
 
 int CStream::setup_alsa(bool toTest)
 {
-    disconnect();
-    if(mParams) {
-        snd_pcm_hw_params_free(mParams);
-        mParams = NULL;
+    snd_pcm_hw_params_t * params = NULL;
+    if(mState == PA_STREAM_FAILED) {
+        return -1; // Already checked and failed
+    } else if(mAlsaHnd) {
+        return 0;  // Already done.
+    } else if(toTest && mCheckedSetup) {
+        return 0; // Already checked
     }
+    mCheckedSetup = true;
  
     int rc;
     do {
@@ -356,51 +353,68 @@ int CStream::setup_alsa(bool toTest)
             break;
         }
 
-        if((rc = snd_pcm_hw_params_malloc(&mParams)) < 0) {
+        if((rc = snd_pcm_hw_params_malloc(&params)) < 0) {
             DEBUG_MSG("Failed to alloc hw params: %s", snd_strerror(rc));
             break;
         }
 
-        if((rc = snd_pcm_hw_params_any(mAlsaHnd, mParams)) < 0) {
+        if((rc = snd_pcm_hw_params_any(mAlsaHnd, params)) < 0) {
             DEBUG_MSG("Failed to read config space: %s", snd_strerror(rc));
             break;
         }
 
-        if((rc = snd_pcm_hw_params_set_rate_resample(mAlsaHnd, mParams, 0)) < 0) {
+        if((rc = snd_pcm_hw_params_set_rate_resample(mAlsaHnd, params, 0)) < 0) {
             DEBUG_MSG("Failed to disable resampling: %s", snd_strerror(rc));
             break;
         }
 
         if(!toTest) {
-            if((rc = test_and_set_access()) < 0) {
+            if((rc = test_and_set_access(params)) < 0) {
                 break;
             }
         }
 
-        if((rc = test_and_set_format()) < 0) {
+        if((rc = test_and_set_format(params)) < 0) {
             break;
         }
 
-        if((rc = test_and_set_channel()) < 0) {
+        if((rc = test_and_set_channel(params)) < 0) {
             break;
         }
 
-        if((rc = test_and_set_rate()) < 0) {
+        if((rc = test_and_set_rate(params)) < 0) {
             break;
         }
 
         if(!toTest) {
-            if((rc = snd_pcm_hw_params(mAlsaHnd, mParams)) < 0) {
+            if((rc = snd_pcm_hw_params(mAlsaHnd, params)) < 0) {
                 DEBUG_MSG("Failed to set HW parameters: %s", snd_strerror(rc));
                 break;
             }
+            snd_pcm_hw_params_get_buffer_size( params, &mBufferSize);
+            snd_pcm_prepare(mAlsaHnd);
+            snd_pcm_start(mAlsaHnd);
         }
     } while(false);
 
     DEBUG_MSG("Final ALSA status %i", rc);
+    if(params) {
+        snd_pcm_hw_params_free(params);
+    }
 
-    if((rc < 0) || toTest) {
-        disconnect();
+
+    if(rc < 0) {
+        set_state(PA_STREAM_FAILED);
+        if(mAlsaHnd) {
+            snd_pcm_close(mAlsaHnd);
+            mAlsaHnd = NULL;
+        }
+    } else if(toTest) {
+        set_state(PA_STREAM_UNCONNECTED);
+        snd_pcm_close(mAlsaHnd);
+        mAlsaHnd = NULL;
+    } else {
+        set_state(PA_STREAM_READY);
     }
     return rc;
 }
@@ -408,13 +422,13 @@ int CStream::setup_alsa(bool toTest)
 /**
  *
  */
-int CStream::test_and_set_access()
+int CStream::test_and_set_access(snd_pcm_hw_params_t * params)
 {
     int rc;
     unsigned int i;
 
     for(i = 0; i < sizeof(g_accesses)/sizeof(snd_pcm_access_t); i++) {
-        if((rc = snd_pcm_hw_params_test_access(mAlsaHnd, mParams, g_accesses[i])) < 0) {
+        if((rc = snd_pcm_hw_params_test_access(mAlsaHnd, params, g_accesses[i])) < 0) {
             continue;
         } else {
             DEBUG_MSG("Access type %s is supported", snd_pcm_access_name(g_accesses[i]));
@@ -422,7 +436,7 @@ int CStream::test_and_set_access()
         }
     }
     if(rc >= 0) {
-        if((rc = snd_pcm_hw_params_set_access(mAlsaHnd, mParams, g_accesses[i])) < 0) {
+        if((rc = snd_pcm_hw_params_set_access(mAlsaHnd, params, g_accesses[i])) < 0) {
             DEBUG_MSG("Failed to set access mode: %s", snd_strerror(rc));
         }
     }
@@ -432,7 +446,7 @@ int CStream::test_and_set_access()
 /**
  *
  */
-int CStream::test_and_set_format()
+int CStream::test_and_set_format(snd_pcm_hw_params_t * params)
 {
     int rc;
     snd_pcm_format_t format;
@@ -444,7 +458,7 @@ int CStream::test_and_set_format()
         DEBUG_MSG("Testing %s", snd_pcm_format_name(format));
         if(format == SND_PCM_FORMAT_UNKNOWN) {
             break;
-        } else if((rc = snd_pcm_hw_params_test_format(mAlsaHnd, mParams, format)) >= 0) {
+        } else if((rc = snd_pcm_hw_params_test_format(mAlsaHnd, params, format)) >= 0) {
             DEBUG_MSG("Format type %s is supported", snd_pcm_format_name(format));
             break;
         }
@@ -454,7 +468,7 @@ int CStream::test_and_set_format()
         for(i = 0; i < sizeof(g_formats)/sizeof(snd_pcm_format_t); i++) {
             format = g_formats[i];
             DEBUG_MSG("Testing %s", snd_pcm_format_name(format));
-            if((rc = snd_pcm_hw_params_test_format(mAlsaHnd, mParams, format)) < 0) {
+            if((rc = snd_pcm_hw_params_test_format(mAlsaHnd, params, format)) < 0) {
                 continue;
             } else {
                 DEBUG_MSG("Format type %s is supported", snd_pcm_format_name(format));
@@ -464,7 +478,7 @@ int CStream::test_and_set_format()
     }
 
     if(rc >= 0) {
-        if((rc = snd_pcm_hw_params_set_format(mAlsaHnd, mParams, format)) < 0) {
+        if((rc = snd_pcm_hw_params_set_format(mAlsaHnd, params, format)) < 0) {
             DEBUG_MSG("Failed to set format: %s", snd_strerror(rc));
         } else {
             mSpec.format = alsa2pa_format(format);
@@ -476,20 +490,20 @@ int CStream::test_and_set_format()
 /**
  *
  */
-int CStream::test_and_set_channel()
+int CStream::test_and_set_channel(snd_pcm_hw_params_t * params)
 {
     int rc;
     unsigned int chans = mMap.channels;
 
-    if((chans == 0) || ((rc = snd_pcm_hw_params_test_channels(mAlsaHnd, mParams, chans)) < 0)) {
+    if((chans == 0) || ((rc = snd_pcm_hw_params_test_channels(mAlsaHnd, params, chans)) < 0)) {
         unsigned int min;
         unsigned int max;
 
-        if((rc = snd_pcm_hw_params_get_channels_min(mParams, &min)) < 0) {
+        if((rc = snd_pcm_hw_params_get_channels_min(params, &min)) < 0) {
 	    DEBUG_MSG("cannot get minimum channels count: %s", snd_strerror(rc));
 	    return rc;
         }
-        if((rc = snd_pcm_hw_params_get_channels_max(mParams, &max)) < 0) {
+        if((rc = snd_pcm_hw_params_get_channels_max(params, &max)) < 0) {
 	    DEBUG_MSG("cannot get maximum channels count: %s", snd_strerror(rc));
 	    return rc;
         }
@@ -497,7 +511,7 @@ int CStream::test_and_set_channel()
             max = 2;
         }
         for (chans = max; chans >= min; --chans) {
-	    if ((rc = snd_pcm_hw_params_test_channels(mAlsaHnd, mParams, chans)) >= 0)
+	    if ((rc = snd_pcm_hw_params_test_channels(mAlsaHnd, params, chans)) >= 0)
 	        break;
         }
     } else {
@@ -505,7 +519,7 @@ int CStream::test_and_set_channel()
     }
 
     if(rc >= 0) {
-        if((rc = snd_pcm_hw_params_set_channels(mAlsaHnd, mParams, chans)) < 0) {
+        if((rc = snd_pcm_hw_params_set_channels(mAlsaHnd, params, chans)) < 0) {
             DEBUG_MSG("Failed to set channels: %s", snd_strerror(rc));
         } else {
             mMap.channels = chans;
@@ -521,35 +535,35 @@ int CStream::test_and_set_channel()
 /**
  *
  */
-int CStream::test_and_set_rate()
+int CStream::test_and_set_rate(snd_pcm_hw_params_t * params)
 {
     int rc;
     unsigned int rate = mSpec.rate;
 
     DEBUG_MSG("Rate is : %u", rate);
 
-    if((rate == 0) || ((rc = snd_pcm_hw_params_test_rate(mAlsaHnd, mParams, rate, 0)) < 0)) {
+    if((rate == 0) || ((rc = snd_pcm_hw_params_test_rate(mAlsaHnd, params, rate, 0)) < 0)) {
 
         unsigned int min;
         unsigned int max;
-        if((rc = snd_pcm_hw_params_get_rate_min(mParams, &min, NULL)) < 0) {
+        if((rc = snd_pcm_hw_params_get_rate_min(params, &min, NULL)) < 0) {
 	    DEBUG_MSG("cannot get minimum rate: %s", snd_strerror(rc));
 	    return rc;
         }
-        if((rc = snd_pcm_hw_params_get_rate_max(mParams, &max, NULL)) < 0) {
+        if((rc = snd_pcm_hw_params_get_rate_max(params, &max, NULL)) < 0) {
 	    DEBUG_MSG("cannot get maximum rate: %s", snd_strerror(rc));
 	    return rc;
         }
         if (min == max) {
             rate = min;
-        } else if ((rc = snd_pcm_hw_params_test_rate(mAlsaHnd, mParams, min + 1, 0)) >= 0) {
+        } else if ((rc = snd_pcm_hw_params_test_rate(mAlsaHnd, params, min + 1, 0)) >= 0) {
 	    printf(" %u-%u", min, max);
         }else {
             unsigned int i;
             for(i = min; i < max; i++) {
 //		any_rate = 0;
 //                for (i = 0; i < ARRAY_SIZE(rates); ++i) {
-			if (!snd_pcm_hw_params_test_rate(mAlsaHnd, mParams, i, 0)) {
+			if (!snd_pcm_hw_params_test_rate(mAlsaHnd, params, i, 0)) {
 //				any_rate = 1;
 				printf(" %u", i);
 			}
@@ -574,7 +588,7 @@ int CStream::test_and_set_rate()
 #endif
 
         unsigned int rate;
-        if((rc = snd_pcm_hw_params_get_rate(mParams, &rate, NULL)) < 0) {
+        if((rc = snd_pcm_hw_params_get_rate(params, &rate, NULL)) < 0) {
             DEBUG_MSG("Failed to get rate: %s", snd_strerror(rc));
             // return NULL;
         }
@@ -584,7 +598,7 @@ int CStream::test_and_set_rate()
 
     if(rc >= 0) {
         int dir = 0;
-        if((rc = snd_pcm_hw_params_set_rate_near(mAlsaHnd, mParams, &rate, &dir)) < 0) {
+        if((rc = snd_pcm_hw_params_set_rate_near(mAlsaHnd, params, &rate, &dir)) < 0) {
             DEBUG_MSG("Failed to set the rate: %s", snd_strerror(rc));
         } else {
             mSpec.rate = rate;
@@ -598,6 +612,7 @@ int CStream::disconnect()
     if(mAlsaHnd) {
         snd_pcm_close(mAlsaHnd);
         mAlsaHnd = NULL;
+        set_state(PA_STREAM_UNCONNECTED);
     }
     return 0;
 }
@@ -609,8 +624,8 @@ int CStream::cancel_write()
 
 const pa_channel_map * CStream::get_channel_map()
 {
-    if(!mParams) {
-        return NULL;
+    if(!mCheckedSetup) {
+        CStream::setup_alsa(true);
     }
     return &mMap;
 }
@@ -638,24 +653,22 @@ size_t CStream::writable_size()
 
 const pa_sample_spec * CStream::get_sample_spec()
 {
-    if(!mParams) {
+    if(!mCheckedSetup) {
         CStream::setup_alsa(true);
     }
     return &mSpec;
 }
 
 
-pa_stream_state_t CStream::get_state()
+void CStream::set_state(pa_stream_state_t newState)
 {
-//    PA_STREAM_UNCONNECTED,  /**< The stream is not yet connected to any sink or source */
-//    PA_STREAM_CREATING,     /**< The stream is being created */
-//    PA_STREAM_READY,        /**< The stream is established, you may pass audio data to it now */
-//    PA_STREAM_FAILED,       /**< An error occurred that made the stream invalid */
-//    PA_STREAM_TERMINATED    /**< The stream has been terminated cleanly */
-    if(mAlsaHnd) {
-        return PA_STREAM_READY;
-    } else {
-        return PA_STREAM_UNCONNECTED;
+    if(newState == mState)
+    {
+        return;
+    }
+    mState = newState;
+    if(mState_cb) {
+        mContext->mainloop_once(new CStreamNotifyCb(mState_cb, to_pa(), mState_userdata));
     }
 }
 
