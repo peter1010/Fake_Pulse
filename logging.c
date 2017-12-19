@@ -64,7 +64,7 @@ void log_msg(const char * fmt, ...)
         clock_gettime(CLOCK_MONOTONIC, &ts);
 
         if(ts.tv_sec == prev_ts.tv_sec) {
-            if(msg_per_sec > 50) {
+            if(msg_per_sec > 100) {
                 msg_missed++;
             }
         } else {

@@ -6,10 +6,16 @@ void CBlob::callback(pa_mainloop_api * mainloop, pa_defer_event * evt, void * se
 {
     CBlob * Self = reinterpret_cast<CBlob *>(self);
 
-    DEBUG_MSG("%s called", __func__);
-    Self->doCallback(mainloop);
-    mainloop->defer_free(evt);
-    DEBUG_MSG("%s returned", __func__);
+    if(Self) {
+        DEBUG_MSG("CBlob::callback called");
+        Self->doCallback(mainloop);
+        if(mainloop && evt) {
+            mainloop->defer_free(evt);
+        }
+        DEBUG_MSG("CBlob::callback returned");
+    } else {
+        DEBUG_MSG("CBlob::callback Self is none");
+    }
 }
 
 
@@ -19,5 +25,7 @@ void CBlob::free(pa_mainloop_api * mainloop, pa_defer_event * evt, void * self)
     (void) evt;
 
     CBlob * Self = reinterpret_cast<CBlob *>(self);
-    delete Self;
+    if(Self) {
+        delete Self;
+    }
 }

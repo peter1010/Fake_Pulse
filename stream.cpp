@@ -57,6 +57,14 @@ static const snd_pcm_format_t g_formats[] = {
     SND_PCM_FORMAT_U18_3BE,
 };
 
+/**
+ * Convert from ALSA format to PA formats. There is a many to 1
+ * relationship.
+ *
+ * @param[in] format The ALSA format
+ *
+ * @return The equivalent PA format
+ */
 static pa_sample_format_t alsa2pa_format(snd_pcm_format_t format) {
 
     switch(format) {
@@ -122,7 +130,15 @@ static pa_sample_format_t alsa2pa_format(snd_pcm_format_t format) {
     }
 }
 
-
+/**
+ * Convert from PA format to ALSA formats. There is a 1 to many
+ * relationship so return a list
+ *
+ * @param[in] format The PA format
+ *
+ * @return A list of equivalent ALSA formats with a sentinel value of
+ *      SND_PCM_FORMAT_UNKNOWN to mark the end of the list
+ */
 static const snd_pcm_format_t * pa2alsa_formats(pa_sample_format_t format) {
 
     switch(format) {
@@ -273,6 +289,11 @@ static const snd_pcm_format_t * pa2alsa_formats(pa_sample_format_t format) {
 
 
 /**
+ * Create a stream class. At his point the ALSA library
+ * has yet to be queried or setup.
+ *
+ * @param[in] context The parent context object
+ * @param[in] name The name of the stream (ignored)
  *
  */
 CStream::CStream(CContext * context, const char * name,
@@ -283,8 +304,8 @@ CStream::CStream(CContext * context, const char * name,
 
     mContext = context;
     mAlsaHnd = NULL;
-    mState = PA_STREAM_UNCONNECTED;
-    mCheckedSetup = false;
+    mState = UNCONNECTED;
+    mWrite_cb = NULL;
 
     if(desired_sample_spec) {
         mSpec = *desired_sample_spec;
@@ -306,14 +327,28 @@ CStream::CStream(CContext * context, const char * name,
  */
 CStream::~CStream()
 {
+    mContext->decRef();
+    mContext = NULL;
     disconnect();
 }
 
+static uint32_t buffer[512*2048];
+
+/**
+ * Called when the application wants PA to provide a
+ * buffer (to avoid copy)
+ *
+ * @param[out] data The allocated buffer
+ * @param[out] nBytes The size of the buffer
+ *
+ * @return zero on success
+ */
 int CStream::begin_write(void **data,  size_t *nbytes)
 {
-    (void) data;
-    (void) nbytes;
+    size_t req_bytes = *nbytes;
 
+    *data = (void *) buffer;
+    *nbytes = req_bytes < 32768 ? req_bytes : 32768;
     return 0;
 }
 
@@ -334,17 +369,21 @@ int CStream::connect_playback(const char * dev, const pa_buffer_attr * attr, pa_
     return rc < 0 ? 1 : 0;
 }
 
+/**
+ *
+ */
 int CStream::setup_alsa(bool toTest)
 {
-    snd_pcm_hw_params_t * params = NULL;
-    if(mState == PA_STREAM_FAILED) {
+    snd_pcm_hw_params_t * hw_params = NULL;
+    snd_pcm_sw_params_t * sw_params = NULL;
+
+    if(mState == FAILED) {
         return -1; // Already checked and failed
     } else if(mAlsaHnd) {
         return 0;  // Already done.
-    } else if(toTest && mCheckedSetup) {
+    } else if(toTest && (mState != UNCONNECTED)) {
         return 0; // Already checked
     }
-    mCheckedSetup = true;
  
     int rc;
     do {
@@ -353,68 +392,95 @@ int CStream::setup_alsa(bool toTest)
             break;
         }
 
-        if((rc = snd_pcm_hw_params_malloc(&params)) < 0) {
+        if((rc = snd_pcm_hw_params_malloc(&hw_params)) < 0) {
             DEBUG_MSG("Failed to alloc hw params: %s", snd_strerror(rc));
             break;
         }
 
-        if((rc = snd_pcm_hw_params_any(mAlsaHnd, params)) < 0) {
+        if((rc = snd_pcm_hw_params_any(mAlsaHnd, hw_params)) < 0) {
             DEBUG_MSG("Failed to read config space: %s", snd_strerror(rc));
             break;
         }
 
-        if((rc = snd_pcm_hw_params_set_rate_resample(mAlsaHnd, params, 0)) < 0) {
+        if((rc = snd_pcm_hw_params_set_rate_resample(mAlsaHnd, hw_params, 0)) < 0) {
             DEBUG_MSG("Failed to disable resampling: %s", snd_strerror(rc));
             break;
         }
 
         if(!toTest) {
-            if((rc = test_and_set_access(params)) < 0) {
+            if((rc = test_and_set_access(hw_params)) < 0) {
                 break;
             }
         }
 
-        if((rc = test_and_set_format(params)) < 0) {
+        if((rc = test_and_set_format(hw_params)) < 0) {
             break;
         }
 
-        if((rc = test_and_set_channel(params)) < 0) {
+        if((rc = test_and_set_channel(hw_params)) < 0) {
             break;
         }
 
-        if((rc = test_and_set_rate(params)) < 0) {
+        if((rc = test_and_set_rate(hw_params)) < 0) {
             break;
         }
 
         if(!toTest) {
-            if((rc = snd_pcm_hw_params(mAlsaHnd, params)) < 0) {
+            if((rc = test_and_set_buffer(hw_params)) < 0) {
+                break;
+            }
+            
+            if((rc = snd_pcm_hw_params(mAlsaHnd, hw_params)) < 0) {
                 DEBUG_MSG("Failed to set HW parameters: %s", snd_strerror(rc));
                 break;
             }
-            snd_pcm_hw_params_get_buffer_size( params, &mBufferSize);
-            snd_pcm_prepare(mAlsaHnd);
-            snd_pcm_start(mAlsaHnd);
+
+            if((rc = snd_pcm_sw_params_malloc(&sw_params)) < 0) {
+                DEBUG_MSG("Failed to alloc hw params: %s", snd_strerror(rc));
+                break;
+            }
+
+            if((rc = snd_pcm_sw_params_current(mAlsaHnd, sw_params)) < 0) {
+                DEBUG_MSG("Failed to get current sw settings: %s", snd_strerror(rc));
+                break;
+            }
+            if((rc = snd_pcm_sw_params_set_period_event(mAlsaHnd, sw_params, 1)) < 0) {
+                DEBUG_MSG("Failed to set period events: %s", snd_strerror(rc));
+                break;
+            }
+            if((rc = snd_pcm_sw_params(mAlsaHnd, sw_params)) < 0) {
+                DEBUG_MSG("Failed to set SW parameters: %s", snd_strerror(rc));
+                break;
+            }
+            if((rc = snd_pcm_prepare(mAlsaHnd)) < 0) {
+                DEBUG_MSG("Failed to prepare: %s", snd_strerror(rc));
+                break;
+            }
         }
     } while(false);
 
     DEBUG_MSG("Final ALSA status %i", rc);
-    if(params) {
-        snd_pcm_hw_params_free(params);
+    if(hw_params) {
+        snd_pcm_hw_params_free(hw_params);
+    }
+    if(sw_params) {
+        snd_pcm_sw_params_free(sw_params);
     }
 
 
     if(rc < 0) {
-        set_state(PA_STREAM_FAILED);
+        set_state(FAILED);
         if(mAlsaHnd) {
             snd_pcm_close(mAlsaHnd);
             mAlsaHnd = NULL;
         }
     } else if(toTest) {
-        set_state(PA_STREAM_UNCONNECTED);
+        set_state(CHECKED);
         snd_pcm_close(mAlsaHnd);
         mAlsaHnd = NULL;
     } else {
-        set_state(PA_STREAM_READY);
+        set_state(READY);
+        setup_alsa_callback();
     }
     return rc;
 }
@@ -607,12 +673,40 @@ int CStream::test_and_set_rate(snd_pcm_hw_params_t * params)
     return rc;
 }
 
+int CStream::test_and_set_buffer(snd_pcm_hw_params_t * params)
+{
+    unsigned int buffer_time = 100000;
+    int dir = -1;
+    int rc;
+    do {
+        if((rc = snd_pcm_hw_params_set_buffer_time_near(mAlsaHnd, params, &buffer_time, &dir)) < 0) {
+            DEBUG_MSG("Failed to set Buffer time: %s", snd_strerror(rc));
+            break;
+        }
+        if((rc = snd_pcm_hw_params_get_buffer_size(params, &mBufferSize)) < 0) {
+            DEBUG_MSG("Failed to get Buffer size: %s", snd_strerror(rc));
+            break;
+        }
+        unsigned int period_time = buffer_time/2;
+        if((rc = snd_pcm_hw_params_set_period_time_near(mAlsaHnd, params, &period_time, &dir)) < 0) {
+            DEBUG_MSG("Failed to set Period time: %s", snd_strerror(rc));
+            break;
+        }
+
+        snd_pcm_format_t fmt;
+        snd_pcm_hw_params_get_format(params, &fmt);
+        mFrameSize = snd_pcm_format_size(fmt, mSpec.channels);
+
+    } while(0);
+    return rc;
+}
+
 int CStream::disconnect()
 {
     if(mAlsaHnd) {
         snd_pcm_close(mAlsaHnd);
         mAlsaHnd = NULL;
-        set_state(PA_STREAM_UNCONNECTED);
+        set_state(UNCONNECTED);
     }
     return 0;
 }
@@ -624,9 +718,7 @@ int CStream::cancel_write()
 
 const pa_channel_map * CStream::get_channel_map()
 {
-    if(!mCheckedSetup) {
-        CStream::setup_alsa(true);
-    }
+    setup_alsa(true);
     return &mMap;
 }
 
@@ -645,59 +737,110 @@ int CStream::get_latency(pa_usec_t * r_usec, int * negative)
 size_t CStream::writable_size()
 {
     size_t amount = 0;
-    if(mAlsaHnd) {
+    if(mState == READY) {
+        amount = mBufferSize;
+    } else if(mState == RUNNING) {
         amount = snd_pcm_avail(mAlsaHnd);
+    } else {
+        amount = 0;
     }
-    return amount;
+    return amount * mFrameSize;
 }
 
 const pa_sample_spec * CStream::get_sample_spec()
 {
-    if(!mCheckedSetup) {
-        CStream::setup_alsa(true);
-    }
+    setup_alsa(true);
     return &mSpec;
 }
 
-
-void CStream::set_state(pa_stream_state_t newState)
+pa_stream_state_t CStream::toPaState(InternalState state) 
 {
-    if(newState == mState)
-    {
-        return;
-    }
-    mState = newState;
-    if(mState_cb) {
-        mContext->mainloop_once(new CStreamNotifyCb(mState_cb, to_pa(), mState_userdata));
+    switch(state) {
+        case UNCONNECTED:
+        case CHECKED:
+            return PA_STREAM_UNCONNECTED;
+
+        case READY:
+        case RUNNING:
+            return PA_STREAM_READY;
+
+        default:
+            return PA_STREAM_FAILED;
     }
 }
 
+
+
+void CStream::set_state(InternalState newState)
+{
+    if(newState != mState)
+    {
+        const InternalState oldState = mState;
+        mState = newState;
+        if(mState_cb && (toPaState(newState) != toPaState(oldState))) {
+            mContext->mainloop_once(new CStreamNotifyCb(mState_cb, to_pa(), mState_userdata));
+        }
+    }
+}
+
+unsigned long soFar = 0;
 int CStream::get_time(pa_usec_t * r_usec)
 {
-    (void) r_usec;
-
+    if(mState == RUNNING) {
+        const snd_pcm_uframes_t avail = snd_pcm_avail(mAlsaHnd);
+        *r_usec = 10000 * (soFar - (mBufferSize - avail))/480;
+    } else {
+        *r_usec = 0;
+    }
     return 0;
 }
 
 int CStream::write(const void * data, size_t nbytes, pa_free_cb_t free_cb, off_t offset, pa_seek_mode_t seek)
 {
+    const snd_pcm_uframes_t frames = nbytes / mFrameSize;
+    soFar += frames;
+
     if((offset != 0) || (seek != PA_SEEK_RELATIVE) || (data == NULL)) {
         return -1;
     }
-    //snd_pcm_ab
-    (void) nbytes;
-    (void) free_cb;
-
+    if(mState == READY) {
+        snd_pcm_start(mAlsaHnd);
+        mState = RUNNING;
+    }
+    if(mAlsaHnd) {
+        snd_pcm_writei(mAlsaHnd, data, frames);
+    }
+    if(free_cb) {
+        free_cb(const_cast<void *>(data));
+    }
     return 0;
+}
+
+void CStream::AlsaCallback(snd_async_handler_t * ahnd)
+{
+    CStream * self = reinterpret_cast<CStream *>(snd_async_handler_get_callback_private(ahnd));
+    if(self->mWrite_cb) {
+        const unsigned int avail = self->mFrameSize * snd_pcm_avail_update(self->mAlsaHnd);
+        if(avail > 0) {
+            DEBUG_MSG("Queuing a set write callback(%u)", avail);
+            self->mContext->mainloop_once(new CStreamRequestCb(self->mWrite_cb, self->to_pa(), avail, self->mWrite_userdata));
+        }
+    }
+}
+
+void CStream::setup_alsa_callback()
+{
+    if(mAlsaHnd && mWrite_cb) {
+        snd_async_add_pcm_handler(&mAlsaCbHandler, mAlsaHnd, AlsaCallback, reinterpret_cast<void *>(this));
+    }
 }
 
 void CStream::set_write_callback( pa_stream_request_cb_t cb, void * userdata)
 {
-    mWrite_cb = cb;
     mWrite_userdata = userdata;
-    if(mAlsaHnd) {
-        DEBUG_MSG("Queuing a set write callback");
-        mContext->mainloop_once(new CStreamRequestCb(cb, to_pa(), 1000, userdata));
+    if(mWrite_cb != cb) {
+        mWrite_cb = cb;
+        setup_alsa_callback();
     }
 }
 

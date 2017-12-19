@@ -38,7 +38,7 @@ bool TraceThreadedMainLoop = false;
 bool TraceMainloopApi = false;
 bool TraceContext = true;
 bool TraceStream = true;
-bool TraceUtilities = false;
+bool TraceUtilities = true;
 bool TraceOperation = false;
 
 /*----------------------------------------------------------------------------*/
@@ -617,14 +617,15 @@ pa_usec_t pa_rtclock_now(void)
 int pa_stream_begin_write(pa_stream * p, void ** data, size_t * nbytes)
 {
     int retVal;
-    if(TraceStream) {
-        DEBUG_MSG("%s called ", __func__);
-    }
+    size_t requestedBytes = *nbytes;
     if(UseRealPulse) {
         GET_ORIGINAL(stream_begin_write);
         retVal = orig(p, data, nbytes);
     } else {
         retVal = CStream::from_pa(p)->begin_write(data, nbytes);
+    }
+    if(TraceStream) {
+        DEBUG_MSG("%s(%lu) returned %lu bytes ", __func__, requestedBytes, *nbytes);
     }
     return retVal;
 }
@@ -681,7 +682,7 @@ pa_operation * pa_stream_cork(pa_stream * s, int b, pa_stream_success_cb_t cb, v
 {
     pa_operation * retVal;
     if(TraceStream) {
-        DEBUG_MSG("%s called ", __func__);
+        DEBUG_MSG("%s(%i) called ", __func__, b);
         if(cb) {
             stream_cork_cb_func = cb;
             cb = stream_cork_cb;
@@ -807,17 +808,10 @@ int pa_stream_get_time(pa_stream * s, pa_usec_t * r_usec)
         GET_ORIGINAL(stream_get_time);
         retVal = orig(s, r_usec);
     } else {
-        if(UseRealUtilities) {
-            GET_ORIGINAL(rtclock_now);
-            *r_usec = orig();
-            retVal = 0;
-        } else {
-            retVal = 0;
-        }
-        // retVal = CStream::from_pa(s)->get_time(r_usec);
+        retVal = CStream::from_pa(s)->get_time(r_usec);
     }
     if(TraceStream) {
-        DEBUG_MSG("%s returned %lu", __func__, *r_usec);
+        DEBUG_MSG("%s returned %lu us", __func__, *r_usec);
     }
     return retVal;
 }
@@ -841,7 +835,7 @@ pa_stream * pa_stream_new(pa_context * c, const char * name, const pa_sample_spe
 
 /*----------------------------------------------------------------------------*/
 
-int pa_stream_peek(pa_stream * p _UNUSED, const void **data _UNUSED, size_t *nbytes _UNUSED)
+int pa_stream_peek(pa_stream * p, const void ** data, size_t * nbytes)
 {
     int retVal;
     if(TraceStream) {
@@ -894,7 +888,7 @@ static pa_stream_request_cb_t stream_write_cb_func;
 
 static void stream_write_cb(pa_stream * p, size_t nbytes, void * userdata)
 {
-    DEBUG_MSG("%s called ", __func__);
+    DEBUG_MSG("%s(%lu) called ", __func__, nbytes);
     stream_write_cb_func(p, nbytes, userdata);
 }
 
@@ -980,7 +974,7 @@ int pa_stream_write(pa_stream * p,
 {
     int retVal;
     if(TraceStream) {
-        DEBUG_MSG("%s called ", __func__);
+        DEBUG_MSG("%s(%lu) called ", __func__, nbytes);
         if(free_cb) {
             write_free_cb_func = free_cb;
             free_cb = write_free_cb;
@@ -988,7 +982,7 @@ int pa_stream_write(pa_stream * p,
     }
     if(UseRealPulse) {
         GET_ORIGINAL(stream_write);
-        retVal = orig(p, data, nbytes, free_cb ? write_free_cb : free_cb, offset, seek);
+        retVal = orig(p, data, nbytes, free_cb, offset, seek);
     } else {
         retVal = CStream::from_pa(p)->write(data, nbytes, free_cb, offset, seek);
     }
@@ -1432,7 +1426,7 @@ pa_operation * pa_context_subscribe(pa_context * c,
 
 void (*callback_func)(pa_mainloop_api*, void *);
 
-static void callback_cb(pa_mainloop_api *m, void * userdata)
+static void api_once_callback_cb(pa_mainloop_api *m, void * userdata)
 {
     DEBUG_MSG("%s called ", __func__);
     callback_func(m, userdata);
@@ -1445,7 +1439,7 @@ void pa_mainloop_api_once(pa_mainloop_api * m,
         DEBUG_MSG("%s called ", __func__);
         if(callback) {
             callback_func = callback;
-            callback = callback ? callback_cb : callback;
+            callback = api_once_callback_cb;
         }
     }
 

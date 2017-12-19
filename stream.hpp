@@ -42,7 +42,7 @@ public:
     int get_latency(pa_usec_t * r_usec, int * negative);
     size_t writable_size();
     const pa_sample_spec * get_sample_spec();
-    pa_stream_state_t get_state() const { return mState; };
+    pa_stream_state_t get_state() const { return toPaState(mState); };
     int get_time(pa_usec_t * r_usec);
     void set_state_callback(pa_stream_notify_cb_t cb, void * userdata);
 
@@ -57,22 +57,38 @@ private:
     int test_and_set_format(snd_pcm_hw_params_t * params);
     int test_and_set_channel(snd_pcm_hw_params_t * params);
     int test_and_set_rate(snd_pcm_hw_params_t * params);
-        
-    void set_state(pa_stream_state_t newState);
+    int test_and_set_buffer(snd_pcm_hw_params_t * params);
 
 
-    bool mCheckedSetup;
+    enum InternalState {
+        UNCONNECTED,
+        CHECKED,
+        CONNECTED,
+        READY,
+        RUNNING,
+        FAILED
+    };
+    
+    InternalState mState;
+
+    static pa_stream_state_t toPaState(InternalState state);
+    void set_state(InternalState newState);
 
     CContext * mContext;
     snd_pcm_t * mAlsaHnd;
+
     snd_pcm_uframes_t mBufferSize;
+    size_t mFrameSize;
+
     pa_sample_spec mSpec;
     pa_channel_map mMap;
 
     pa_stream_request_cb_t mWrite_cb;
     void * mWrite_userdata;
+    static void AlsaCallback(snd_async_handler_t * hnd);
+    void setup_alsa_callback();
+    snd_async_handler_t * mAlsaCbHandler;
 
-    pa_stream_state_t mState;
     pa_stream_notify_cb_t mState_cb;
     void * mState_userdata;
 

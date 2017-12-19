@@ -18,10 +18,10 @@
 #include "originals.h"
 
 
-extern "C" void * __libc_dlsym(void * handle, const char * symbol);
-extern "C" void * _dl_sym(void * handle, const char * symbol, void * callee);
+extern "C" void * __libc_dlsym(void *, const char *);
+extern "C" void * _dl_sym(void *, const char *, void *);
 
-void * libPulseHandle = NULL;
+static void * libPulseHandle = NULL;
 
 #define MAGIC_HND (void *)(0x1865FE45)
 
