@@ -5,11 +5,13 @@
  * licensed under the gpl license. see license file in the project root for full license information.  
  */
 
+#include <stdlib.h>
+
+#include "config.h"
 #include "logging.h"
 #include "pulseaudio.h"
 #include "defs.h"
 #include "originals.h"
-#include <stdlib.h>
 
 #include "threaded_mainloop.hpp"
 #include "context.hpp"
@@ -23,21 +25,44 @@ void init_symbols(void);
 
 
 #ifdef INCLUDE_SIMPLE_THREADED_MAINLOOP
-bool UseRealThreadedMainloop = false;
+static bool UseRealThreadedMainloop = false;
 #else
 #define UseRealThreadedMainloop true
 #endif
-bool UseRealMainloopApi = true;
-bool UseRealPulse = false;
-bool UseRealUtilities = true;
+static bool UseRealMainloopApi = true;
+static bool UseRealPulse = false;
+static bool UseRealUtilities = true;
 
 
-bool TraceThreadedMainLoop = false;
-bool TraceMainloopApi = false;
-bool TraceContext = true;
-bool TraceStream = true;
-bool TraceUtilities = true;
-bool TraceOperation = false;
+static bool TraceThreadedMainLoop = false;
+static bool TraceMainloopApi = false;
+static bool TraceContext = true;
+static bool TraceStream = true;
+static bool TraceUtilities = true;
+static bool TraceOperation = false;
+
+/*----------------------------------------------------------------------------*/
+void init_fake_options()
+{
+    char options[] = "0000000000";
+    const char * tmp = getenv("FAKE_PULSE_OPTIONS");
+    if(tmp) {
+        strncpy(options, tmp, 9);
+        TraceThreadedMainLoop = (options[0] != '0');
+        TraceMainloopApi = (options[1] != '0');
+        TraceContext = (options[2] != '0');
+        TraceStream = (options[3] != '0');
+        TraceUtilities = (options[4] != '0');
+        TraceOperation = (options[5] != '0');
+        
+#ifdef INCLUDE_SIMPLE_THREADED_MAINLOOP
+        UseRealThreadedMainloop = (options[6] != '0');
+#endif
+        UseRealMainloopApi = (options[7] != '0');
+        UseRealPulse = (options[8] != '0');
+        UseRealUtilities = (options[9] != '0');
+    }
+}
 
 /*----------------------------------------------------------------------------*/
 const char * pa_get_library_version(void)
@@ -55,7 +80,7 @@ const char * pa_get_library_version(void)
     return retVal;
 }
 
-/*----------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------*/
 int pa_channel_map_can_balance(const pa_channel_map * p)
 {
     int retVal;
@@ -76,9 +101,6 @@ int pa_channel_map_can_balance(const pa_channel_map * p)
 pa_channel_map * pa_channel_map_init(pa_channel_map * p)
 {
     pa_channel_map * retVal;
-    if(TraceUtilities) {
-        DEBUG_MSG("%s called", __func__);
-    }
     if(UseRealUtilities) {
         GET_ORIGINAL(channel_map_init);
         retVal = orig(p);
@@ -90,8 +112,36 @@ pa_channel_map * pa_channel_map_init(pa_channel_map * p)
         p->map[1] = PA_CHANNEL_POSITION_FRONT_RIGHT;
         // FIXME
     }
+    if(TraceUtilities) {
+        DEBUG_MSG("%s returned p->channels=%i", __func__, retVal->channels);
+    }
     return retVal;
 }
+
+/*----------------------------------------------------------------------------*/
+pa_channel_map * pa_channel_map_init_auto(pa_channel_map * p, unsigned channels, pa_channel_map_def_t def)
+{
+    pa_channel_map * retVal;
+    if(TraceUtilities) {
+        DEBUG_MSG("%s(p,%i,%s) called ", __func__, channels, channel_map_def2str(def));
+    }
+    if(UseRealUtilities) {
+        GET_ORIGINAL(channel_map_init_auto);
+        retVal = orig(p, channels, def);
+    } else {
+        /* Lets always have simple stereo */
+        retVal = p;
+        p->channels = 2;
+        p->map[0] = PA_CHANNEL_POSITION_FRONT_LEFT;
+        p->map[1] = PA_CHANNEL_POSITION_FRONT_RIGHT;
+        // FIXME
+    }
+    if(TraceUtilities) {
+        DEBUG_MSG("%s returned p->channels=%i", __func__, retVal->channels);
+    }
+    return retVal;
+}
+
 
 /*----------------------------------------------------------------------------*/
 int pa_context_connect(pa_context * c, const char * server,
@@ -336,7 +386,7 @@ pa_operation * pa_context_get_source_info_list(pa_context *c,
 
 /*----------------------------------------------------------------------------*/
 
-pa_context_state_t pa_context_get_state(pa_context * c)
+extern "C" pa_context_state_t pa_context_get_state(const pa_context * c)
 {
     pa_context_state_t retVal;
     if(UseRealPulse) {
@@ -380,7 +430,7 @@ static void time_event_cb(pa_mainloop_api * api, pa_time_event *evt, const struc
     time_event_cb_func(api, evt, t, userdata);
 }
 
-pa_time_event * pa_context_rttime_new(pa_context * c,
+extern "C" pa_time_event * pa_context_rttime_new(const pa_context * c,
         pa_usec_t usec, pa_time_event_cb_t cb, void *userdata)
 {
     pa_time_event * retVal;
@@ -552,7 +602,7 @@ size_t pa_frame_size(const pa_sample_spec * spec)
 
 /*----------------------------------------------------------------------------*/
 
-pa_operation_state_t pa_operation_get_state(pa_operation *o)
+extern "C" pa_operation_state_t pa_operation_get_state(const pa_operation *o)
 {
     pa_operation_state_t retVal;
     if(UseRealPulse) {
@@ -587,7 +637,7 @@ void pa_operation_unref(pa_operation *o)
 
 /*----------------------------------------------------------------------------*/
 
-const char * pa_proplist_gets(pa_proplist * p, const char * key)
+extern "C" const char * pa_proplist_gets(const pa_proplist * p, const char * key)
 {
     const char * retVal;
     if(UseRealUtilities) {
@@ -741,7 +791,7 @@ const pa_channel_map * pa_stream_get_channel_map(pa_stream * s)
 
 /*----------------------------------------------------------------------------*/
 
-uint32_t pa_stream_get_index(pa_stream * s)
+extern "C" uint32_t pa_stream_get_index(const pa_stream * s)
 {
     uint32_t retVal;
     if(UseRealPulse) {
@@ -792,7 +842,7 @@ const pa_sample_spec * pa_stream_get_sample_spec(pa_stream * s)
 
 /*----------------------------------------------------------------------------*/
 
-pa_stream_state_t pa_stream_get_state(pa_stream * p)
+extern "C" pa_stream_state_t pa_stream_get_state(const pa_stream * p)
 {
     pa_stream_state_t retVal;
     if(UseRealPulse) {
@@ -1358,7 +1408,7 @@ int pa_stream_connect_record(pa_stream * s,
 }
 
 /*----------------------------------------------------------------------------*/
-size_t pa_stream_readable_size(pa_stream * p)
+extern "C" size_t pa_stream_readable_size(const pa_stream * p)
 {
     size_t retVal;
     if(UseRealPulse) {
@@ -1374,7 +1424,7 @@ size_t pa_stream_readable_size(pa_stream * p)
 }
 
 /*----------------------------------------------------------------------------*/
-size_t pa_stream_writable_size(pa_stream * p)
+extern "C" size_t pa_stream_writable_size(const pa_stream * p)
 {
     size_t retVal;
     if(UseRealPulse) {
@@ -1422,7 +1472,7 @@ const pa_buffer_attr * pa_stream_get_buffer_attr(pa_stream * s)
 }
 
 /*----------------------------------------------------------------------------*/
-const char * pa_stream_get_device_name(pa_stream * s)
+extern "C" const char * pa_stream_get_device_name(const pa_stream * s)
 {
     const char * retVal;
     if(UseRealPulse) {

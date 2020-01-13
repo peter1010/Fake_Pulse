@@ -13,11 +13,17 @@
 #   error MUST BE COMPILED AS A C-FILE
 #endif
 
+/**
+ * declarations of function pointers that contain address of the real pulse audio
+ * function. To avoid confusion the function pointer names are prefixed zz_
+ */
+
 #define DEFINE_FP(name) FP_##name zz_##name = NULL
 
 DEFINE_FP(get_library_version);
 DEFINE_FP(channel_map_can_balance);
 DEFINE_FP(channel_map_init);
+DEFINE_FP(channel_map_init_auto);
 DEFINE_FP(context_connect);
 DEFINE_FP(context_disconnect);
 DEFINE_FP(context_drain);

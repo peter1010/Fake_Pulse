@@ -737,7 +737,7 @@ int CStream::get_latency(pa_usec_t * r_usec, int * negative)
     return 0;
 }
 
-size_t CStream::writable_size()
+size_t CStream::writable_size() const
 {
     size_t amount = 0;
     if(mState == READY) {

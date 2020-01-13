@@ -20,6 +20,7 @@ class CContext : public CRefCount
 {
 public:
     static CContext * from_pa(pa_context * c) { return reinterpret_cast<CContext *>(c); };
+    static const CContext * from_pa(const pa_context * c) { return reinterpret_cast<const CContext *>(c); };
     pa_context * to_pa() { return reinterpret_cast<pa_context *>(this); };
 
     CContext(pa_mainloop_api * api, const char * name);
@@ -51,7 +52,7 @@ public:
 
     pa_operation * subscribe(pa_subscription_mask_t m, pa_context_success_cb_t cb, void *userdata);
 
-    pa_time_event * rttime_new(pa_usec_t usec, pa_time_event_cb_t cb, void *userdata);
+    pa_time_event * rttime_new(pa_usec_t usec, pa_time_event_cb_t cb, void *userdata) const;
 
     pa_operation * drain(pa_context_notify_cb_t cb, void * userdata);
 

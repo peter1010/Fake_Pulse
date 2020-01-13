@@ -28,6 +28,7 @@ static void * libPulseHandle = NULL;
 /**
  * Intercept the call to dlopen() 
  *
+ * If the caller is opening the libpulse.so, return a fake handle
  */
 void * dlopen(const char * filename, int flags)
 {
@@ -90,13 +91,17 @@ void * dlsym(void * handle, const char * symbol)
             strcpy(buf, symbol);
             buf[0] = 'z';
             buf[1] = 'z';
+            // Get the function pointer to store away address of real function.
             void ** pSaveAddress = reinterpret_cast<void **>(the_real_dlsym(RTLD_DEFAULT, buf));
             if(pSaveAddress) {
                 *pSaveAddress = address;
             } else {
                 DEBUG_MSG("WARNING: Save Symbol %s missing", buf);
             }
+        } else {
+            DEBUG_MSG("The real version of libpulse does not support %s", symbol);
         }
+
         address = the_real_dlsym(RTLD_DEFAULT, symbol);
         if(address == NULL) {
             address = reinterpret_cast<void *>(pa_dummy);

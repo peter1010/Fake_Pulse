@@ -18,6 +18,7 @@ class COperation : public CRefCount
 {
 public:
     static COperation * from_pa(pa_operation * o) { return reinterpret_cast<COperation *>(o); };
+    static const COperation * from_pa(const pa_operation * o) { return reinterpret_cast<const COperation *>(o); };
     pa_operation * to_pa() { return reinterpret_cast<pa_operation *>(this); };
 
     COperation() {};

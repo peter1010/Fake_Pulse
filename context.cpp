@@ -160,7 +160,7 @@ pa_operation * CContext::subscribe(pa_subscription_mask_t m, pa_context_success_
 /**
  * Wrapper for mainloop->time_new
  */
-pa_time_event * CContext::rttime_new(pa_usec_t usec, pa_time_event_cb_t cb, void *userdata)
+pa_time_event * CContext::rttime_new(pa_usec_t usec, pa_time_event_cb_t cb, void *userdata) const
 {
     const struct timeval tv = 
     {

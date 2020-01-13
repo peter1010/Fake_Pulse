@@ -37,6 +37,8 @@ const char * stream_state2str(pa_stream_state_t state);
 
 const char * subscription_mask2str(pa_subscription_mask_t m);
 
+const char * channel_map_def2str(pa_channel_map_def_t def);
+
 #ifdef __cplusplus
 }
 #endif

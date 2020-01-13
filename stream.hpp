@@ -23,6 +23,7 @@ class CStream : public CRefCount
 {
 public:
     static CStream * from_pa(pa_stream * s) {return reinterpret_cast<CStream *>(s);};
+    static const CStream * from_pa(const pa_stream * s) {return reinterpret_cast<const CStream *>(s);};
     pa_stream * to_pa() {return reinterpret_cast<pa_stream *>(this);};
 
     CStream(CContext *, const char *, const pa_sample_spec *, const pa_channel_map *);
@@ -40,7 +41,7 @@ public:
     const pa_channel_map * get_channel_map();
     uint32_t get_index() const;
     int get_latency(pa_usec_t * r_usec, int * negative);
-    size_t writable_size();
+    size_t writable_size() const;
     const pa_sample_spec * get_sample_spec();
     pa_stream_state_t get_state() const { return toPaState(mState); };
     int get_time(pa_usec_t * r_usec);
@@ -52,8 +53,8 @@ public:
 
     int drop() {return 0;};
     const pa_buffer_attr * get_buffer_attr() { return NULL; };
-    const char * get_device_name() { return NULL; };
-    size_t readable_size() {return 0; };
+    const char * get_device_name() const { return NULL; };
+    size_t readable_size() const {return 0; };
     void set_read_callback(pa_stream_request_cb_t cb, void * userdata) {};
 
     int connect_record(const char *dev, const pa_buffer_attr *attr, pa_stream_flags_t flags) { return 0; };

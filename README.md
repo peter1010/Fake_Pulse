@@ -1,2 +1,6 @@
 # Fake_Pulse
-A light way alternative to pulse audio
+A light alternative to pulse audio
+
+# Usage
+
+LD_PRELOAD=__x86_64__/fake_pulse.so firefox

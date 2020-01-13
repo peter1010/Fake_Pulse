@@ -19,6 +19,7 @@ extern "C" {
 DECLARE_FP(get_library_version);
 DECLARE_FP(channel_map_can_balance);
 DECLARE_FP(channel_map_init);
+DECLARE_FP(channel_map_init_auto);
 DECLARE_FP(context_connect);
 DECLARE_FP(context_disconnect);
 DECLARE_FP(context_drain);

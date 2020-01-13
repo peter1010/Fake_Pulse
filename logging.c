@@ -255,4 +255,17 @@ const char * subscription_mask2str(pa_subscription_mask_t m)
 }
 
 
-
+const char * channel_map_def2str(pa_channel_map_def_t def)
+{
+    const char * str = "UNKNOWN";
+    switch(def) {
+        case PA_CHANNEL_MAP_AIFF: str = "PA_CHANNEL_MAP_AIFF"; break; 	
+        case PA_CHANNEL_MAP_AUX: str = "PA_CHANNEL_MAP_AUX"; break;	
+        case PA_CHANNEL_MAP_WAVEEX: str = "PA_CHANNEL_MAP_WAVEEX"; break; 	
+        case PA_CHANNEL_MAP_DEF_MAX: str = "PA_CHANNEL_MAP_DEF_MAX"; break; 	
+//        case PA_CHANNEL_MAP_DEFAULT: str = "PA_CHANNEL_MAP_DEFAULT"; break;
+        case PA_CHANNEL_MAP_ALSA: str = "PA_CHANNEL_MAP_ALSA"; break;
+        case PA_CHANNEL_MAP_OSS: str = "PA_CHANNEL_MAP_OSS"; break;
+    }
+    return str;
+}
