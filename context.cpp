@@ -22,7 +22,7 @@ CContext::CContext(pa_mainloop_api * api, const char * name)
 
     (void) name;
     mMainloopApi = api;
-    state_cb_func = NULL; 
+    mStateCb_func = NULL; 
     subscribe_cb_func = NULL; 
 
     mInfo.name = "sink";
@@ -80,10 +80,11 @@ int CContext::connect(const char * server, pa_context_flags_t flags, const pa_sp
             api->postfork();
         }
     }
-    if(state_cb_func) {
+    if(mStateCb_func) {
         DEBUG_MSG("Queuing \'set context state callback\'");
         incRef();
-        mainloop_once(new CContextNotifyCb(state_cb_func, to_pa(), state_cb_data));
+//        mainloop_once(new CContextNotifyCb(state_cb_func, to_pa(), state_cb_data));
+        mStateCb_func(to_pa(), state_cb_data);
     }
     return 0;
 }

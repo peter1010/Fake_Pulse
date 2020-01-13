@@ -17,8 +17,6 @@
 #include "stream.hpp"
 #include "operation.hpp"
 
-#define _UNUSED __attribute__((unused))
-
 void init_symbols(void);
 
 #define GET_ORIGINAL(name) FP_##name orig = zz_##name
@@ -589,10 +587,20 @@ void pa_operation_unref(pa_operation *o)
 
 /*----------------------------------------------------------------------------*/
 
-const char * pa_proplist_gets(pa_proplist * p _UNUSED, const char * key _UNUSED)
+const char * pa_proplist_gets(pa_proplist * p, const char * key)
 {
-    DEBUG_MSG("TODO %s called ", __func__);
-    return NULL;
+    const char * retVal;
+    if(UseRealUtilities) {
+        GET_ORIGINAL(proplist_gets);
+        retVal = orig(p, key);
+    } else {
+        retVal = 0;
+        // FIXME
+    }
+    if(TraceUtilities) {
+        DEBUG_MSG("%s(%s) returned %s ", __func__, key, retVal);
+    }
+    return retVal;
 }
 
 /*----------------------------------------------------------------------------*/
@@ -1300,22 +1308,69 @@ size_t pa_usec_to_bytes(pa_usec_t t, const pa_sample_spec *spec)
     return retVal;
 }
 
-void pa_stream_set_read_callback(pa_stream * p _UNUSED, pa_stream_request_cb_t cb _UNUSED, void *userdata _UNUSED)
+/*----------------------------------------------------------------------------*/
+/**
+ * Intercept the callback! 
+ */
+static pa_stream_request_cb_t stream_read_cb_func;
+
+static void stream_read_cb(pa_stream * p, size_t nbytes, void * userdata)
 {
-    DEBUG_MSG("TODO %s called ", __func__);
+    DEBUG_MSG("%s(%lu) called ", __func__, nbytes);
+    stream_read_cb_func(p, nbytes, userdata);
 }
 
-int pa_stream_connect_record(pa_stream * s _UNUSED,
-        const char *dev _UNUSED, const pa_buffer_attr *attr _UNUSED, pa_stream_flags_t flags _UNUSED)
+
+void pa_stream_set_read_callback(pa_stream * p, pa_stream_request_cb_t cb, void * userdata)
 {
-    DEBUG_MSG("TODO %s called ", __func__);
-    return 0;
+    if(TraceStream) {
+        DEBUG_MSG("%s called ", __func__);
+        if(cb) {
+            stream_read_cb_func = cb;
+            cb = stream_read_cb ;
+        }
+    }
+    if(UseRealPulse) {
+        GET_ORIGINAL(stream_set_read_callback);
+        orig(p, cb, userdata);
+    } else {
+        CStream::from_pa(p)->set_read_callback(cb, userdata);
+    }
 }
 
-size_t pa_stream_readable_size(pa_stream * p _UNUSED)
+/*----------------------------------------------------------------------------*/
+
+
+int pa_stream_connect_record(pa_stream * s,
+        const char *dev, const pa_buffer_attr *attr, pa_stream_flags_t flags)
 {
-    DEBUG_MSG("TODO %s called ", __func__);
-    return 0;
+    int retVal;
+    if(TraceStream) {
+        DEBUG_MSG("%s(%s) called ", __func__, dev);
+    }
+    if(UseRealPulse) {
+        GET_ORIGINAL(stream_connect_record);
+        retVal = orig(s, dev, attr, flags);
+    } else {
+        retVal = CStream::from_pa(s)->connect_record(dev, attr, flags);
+    }
+    return retVal;
+}
+
+/*----------------------------------------------------------------------------*/
+size_t pa_stream_readable_size(pa_stream * p)
+{
+    size_t retVal;
+    if(UseRealPulse) {
+        GET_ORIGINAL(stream_readable_size);
+        retVal = orig(p);
+    } else {
+        retVal = CStream::from_pa(p)->readable_size();
+    }
+    if(TraceStream) {
+        DEBUG_MSG("%s returned %lu", __func__, retVal);
+    }
+    return retVal;
 }
 
 /*----------------------------------------------------------------------------*/
@@ -1335,24 +1390,51 @@ size_t pa_stream_writable_size(pa_stream * p)
 }
 
 /*----------------------------------------------------------------------------*/
-int pa_stream_drop(pa_stream * p _UNUSED)
+int pa_stream_drop(pa_stream * p)
 {
-    DEBUG_MSG("TODO %s called ", __func__);
-    return 0;
+    int retVal;
+    if(TraceStream) {
+        DEBUG_MSG("%s called ", __func__);
+    }
+    if(UseRealPulse) {
+        GET_ORIGINAL(stream_drop);
+        retVal = orig(p);
+    } else {
+        retVal = CStream::from_pa(p)->drop();
+    }
+    return retVal;
 }
 
 /*----------------------------------------------------------------------------*/
-const pa_buffer_attr * pa_stream_get_buffer_attr(pa_stream * s _UNUSED)
+const pa_buffer_attr * pa_stream_get_buffer_attr(pa_stream * s)
 {
-    DEBUG_MSG("TODO %s called ", __func__);
-    return NULL;
+    const pa_buffer_attr * retVal;
+    if(TraceStream) {
+        DEBUG_MSG("%s called ", __func__);
+    }
+    if(UseRealPulse) {
+        GET_ORIGINAL(stream_get_buffer_attr);
+        retVal = orig(s);
+    } else {
+        retVal = CStream::from_pa(s)->get_buffer_attr();
+    }
+    return retVal;
 }
 
 /*----------------------------------------------------------------------------*/
-const char * pa_stream_get_device_name(pa_stream * s _UNUSED)
+const char * pa_stream_get_device_name(pa_stream * s)
 {
-    DEBUG_MSG("TODO %s called ", __func__);
-    return NULL;
+    const char * retVal;
+    if(UseRealPulse) {
+        GET_ORIGINAL(stream_get_device_name);
+        retVal = orig(s);
+    } else {
+        retVal = CStream::from_pa(s)->get_device_name();
+    }
+    if(TraceStream) {
+        DEBUG_MSG("%s returned %s", __func__, retVal);
+    }
+    return retVal;
 }
 
 /*----------------------------------------------------------------------------*/

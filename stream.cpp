@@ -306,7 +306,10 @@ CStream::CStream(CContext * context, const char * name,
     mAlsaHnd = NULL;
     mState = UNCONNECTED;
     mWrite_cb = NULL;
+    mState_cb = NULL;
+    mAlsaCbHandler = NULL;
 
+ 
     if(desired_sample_spec) {
         mSpec = *desired_sample_spec;
     } else {
@@ -778,7 +781,8 @@ void CStream::set_state(InternalState newState)
         const InternalState oldState = mState;
         mState = newState;
         if(mState_cb && (toPaState(newState) != toPaState(oldState))) {
-            mContext->mainloop_once(new CStreamNotifyCb(mState_cb, to_pa(), mState_userdata));
+//            mContext->mainloop_once(new CStreamNotifyCb(mState_cb, to_pa(), mState_userdata));
+            mState_cb(to_pa(), mState_userdata);
         }
     }
 }
@@ -823,7 +827,8 @@ void CStream::AlsaCallback(snd_async_handler_t * ahnd)
         const unsigned int avail = self->mFrameSize * snd_pcm_avail_update(self->mAlsaHnd);
         if(avail > 0) {
             DEBUG_MSG("Queuing a set write callback(%u)", avail);
-            self->mContext->mainloop_once(new CStreamRequestCb(self->mWrite_cb, self->to_pa(), avail, self->mWrite_userdata));
+            //self->mContext->mainloop_once(new CStreamRequestCb(self->mWrite_cb, self->to_pa(), avail, self->mWrite_userdata));
+            self->mWrite_cb(self->to_pa(), avail, self->mWrite_userdata);
         }
     }
 }

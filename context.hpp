@@ -28,7 +28,7 @@ public:
         { return PA_CONTEXT_READY; };
 
     void set_state_callback(pa_context_notify_cb_t cb, void * userdata)
-        { state_cb_func = cb; state_cb_data = userdata;};
+        { mStateCb_func = cb; state_cb_data = userdata;};
 
     void set_subscribe_callback(pa_context_subscribe_cb_t cb, void * userdata)
         { subscribe_cb_func = cb; subscribe_cb_data = userdata;};
@@ -63,7 +63,7 @@ private:
 
     pa_mainloop_api * mMainloopApi;
 
-    pa_context_notify_cb_t state_cb_func; 
+    pa_context_notify_cb_t mStateCb_func; 
     void * state_cb_data;
     
     pa_context_subscribe_cb_t subscribe_cb_func; 
