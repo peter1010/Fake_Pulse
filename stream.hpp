@@ -55,9 +55,12 @@ public:
     const pa_buffer_attr * get_buffer_attr() { return NULL; };
     const char * get_device_name() const { return NULL; };
     size_t readable_size() const {return 0; };
-    void set_read_callback(pa_stream_request_cb_t cb, void * userdata) {};
+    void set_read_callback(pa_stream_request_cb_t cb, void * userdata) {(void) cb; (void) userdata;};
 
-    int connect_record(const char *dev, const pa_buffer_attr *attr, pa_stream_flags_t flags) { return 0; };
+    int connect_record(const char *dev, const pa_buffer_attr *attr, pa_stream_flags_t flags) 
+    {
+        (void) dev; (void) attr; (void) flags; return 0; 
+    };
 private:
 
     int setup_alsa(bool toTest);

@@ -17,7 +17,7 @@ static const snd_pcm_access_t g_accesses[] = {
 //    SND_PCM_ACCESS_MMAP_INTERLEAVED,
     SND_PCM_ACCESS_RW_INTERLEAVED,
     SND_PCM_ACCESS_RW_NONINTERLEAVED,
-//    SND_PCM_ACCESS_MMAP_NONINTERLEAVED,    
+//    SND_PCM_ACCESS_MMAP_NONINTERLEAVED,
 //    SND_PCM_ACCESS_MMAP_COMPLEX,
 };
 
@@ -57,13 +57,9 @@ static const snd_pcm_format_t g_formats[] = {
     SND_PCM_FORMAT_U18_3BE,
 };
 
-/**
+/********************************************************************************
  * Convert from ALSA format to PA formats. There is a many to 1
  * relationship.
- *
- * @param[in] format The ALSA format
- *
- * @return The equivalent PA format
  */
 static pa_sample_format_t alsa2pa_format(snd_pcm_format_t format) {
 
@@ -130,14 +126,10 @@ static pa_sample_format_t alsa2pa_format(snd_pcm_format_t format) {
     }
 }
 
-/**
+/********************************************************************************
  * Convert from PA format to ALSA formats. There is a 1 to many
- * relationship so return a list
- *
- * @param[in] format The PA format
- *
- * @return A list of equivalent ALSA formats with a sentinel value of
- *      SND_PCM_FORMAT_UNKNOWN to mark the end of the list
+ * relationship so return a list. A list of equivalent ALSA formats with a
+ * sentinel value of SND_PCM_FORMAT_UNKNOWN to mark the end of the list
  */
 static const snd_pcm_format_t * pa2alsa_formats(pa_sample_format_t format) {
 
@@ -288,13 +280,9 @@ static const snd_pcm_format_t * pa2alsa_formats(pa_sample_format_t format) {
 }
 
 
-/**
+/********************************************************************************
  * Create a stream class. At his point the ALSA library
  * has yet to be queried or setup.
- *
- * @param[in] context The parent context object
- * @param[in] name The name of the stream (ignored)
- *
  */
 CStream::CStream(CContext * context, const char * name,
         const pa_sample_spec * desired_sample_spec,
@@ -309,7 +297,7 @@ CStream::CStream(CContext * context, const char * name,
     mState_cb = NULL;
     mAlsaCbHandler = NULL;
 
- 
+
     if(desired_sample_spec) {
         mSpec = *desired_sample_spec;
     } else {
@@ -325,7 +313,7 @@ CStream::CStream(CContext * context, const char * name,
     context->incRef();
 }
 
-/**
+/********************************************************************************
  *
  */
 CStream::~CStream()
@@ -337,14 +325,9 @@ CStream::~CStream()
 
 static uint32_t buffer[512*2048];
 
-/**
+/********************************************************************************
  * Called when the application wants PA to provide a
- * buffer (to avoid copy)
- *
- * @param[out] data The allocated buffer
- * @param[out] nBytes The size of the buffer
- *
- * @return zero on success
+ * buffer (to avoid copy). return zero on success
  */
 int CStream::begin_write(void **data,  size_t *nbytes)
 {
@@ -355,7 +338,7 @@ int CStream::begin_write(void **data,  size_t *nbytes)
     return 0;
 }
 
-/**
+/********************************************************************************
  * Ignore all passed in parameters
  */
 int CStream::connect_playback(const char * dev, const pa_buffer_attr * attr, pa_stream_flags_t flags,
@@ -372,7 +355,7 @@ int CStream::connect_playback(const char * dev, const pa_buffer_attr * attr, pa_
     return rc < 0 ? 1 : 0;
 }
 
-/**
+/********************************************************************************
  *
  */
 int CStream::setup_alsa(bool toTest)
@@ -387,7 +370,7 @@ int CStream::setup_alsa(bool toTest)
     } else if(toTest && (mState != UNCONNECTED)) {
         return 0; // Already checked
     }
- 
+
     int rc;
     do {
         if((rc = snd_pcm_open(&mAlsaHnd, "hw:0,0", SND_PCM_STREAM_CAPTURE, 0)) < 0) {
@@ -432,7 +415,7 @@ int CStream::setup_alsa(bool toTest)
             if((rc = test_and_set_buffer(hw_params)) < 0) {
                 break;
             }
-            
+
             if((rc = snd_pcm_hw_params(mAlsaHnd, hw_params)) < 0) {
                 DEBUG_MSG("Failed to set HW parameters: %s", snd_strerror(rc));
                 break;
@@ -488,7 +471,7 @@ int CStream::setup_alsa(bool toTest)
     return rc;
 }
 
-/**
+/********************************************************************************
  *
  */
 int CStream::test_and_set_access(snd_pcm_hw_params_t * params)
@@ -512,7 +495,7 @@ int CStream::test_and_set_access(snd_pcm_hw_params_t * params)
     return rc;
 }
 
-/**
+/********************************************************************************
  *
  */
 int CStream::test_and_set_format(snd_pcm_hw_params_t * params)
@@ -556,7 +539,7 @@ int CStream::test_and_set_format(snd_pcm_hw_params_t * params)
     return rc;
 }
 
-/**
+/********************************************************************************
  *
  */
 int CStream::test_and_set_channel(snd_pcm_hw_params_t * params)
@@ -601,7 +584,7 @@ int CStream::test_and_set_channel(snd_pcm_hw_params_t * params)
     return rc;
 }
 
-/**
+/********************************************************************************
  *
  */
 int CStream::test_and_set_rate(snd_pcm_hw_params_t * params)
@@ -676,6 +659,9 @@ int CStream::test_and_set_rate(snd_pcm_hw_params_t * params)
     return rc;
 }
 
+/********************************************************************************
+ *
+ */
 int CStream::test_and_set_buffer(snd_pcm_hw_params_t * params)
 {
     unsigned int buffer_time = 100000;
@@ -704,6 +690,9 @@ int CStream::test_and_set_buffer(snd_pcm_hw_params_t * params)
     return rc;
 }
 
+/********************************************************************************
+ *
+ */
 int CStream::disconnect()
 {
     if(mAlsaHnd) {
@@ -714,29 +703,56 @@ int CStream::disconnect()
     return 0;
 }
 
+/********************************************************************************
+ *
+ */
 int CStream::cancel_write()
 {
     return 0;
 }
 
+/********************************************************************************
+ *
+ */
 const pa_channel_map * CStream::get_channel_map()
 {
     setup_alsa(true);
     return &mMap;
 }
 
+/********************************************************************************
+ *
+ */
 uint32_t CStream::get_index() const
 {
     return 34790;
 }
 
+/********************************************************************************
+ * Calculate the delay from when next sample is added and that sample appears
+ * at the speakers.
+ */
 int CStream::get_latency(pa_usec_t * r_usec, int * negative)
 {
-    *r_usec = 0;
-    *negative = 0;
+    if(r_usec) {
+        snd_pcm_sframes_t delay;
+        int rc;
+        if((rc = snd_pcm_delay(mAlsaHnd, &delay)) < 0) {
+            *r_usec = 0;
+        } else {
+            // Assumes delay is never so large that the maths overflows.
+            *r_usec = (1000000 * delay) / mSpec.rate;
+        }
+    }
+    if(negative) {
+        *negative = 0;
+    }
     return 0;
 }
 
+/********************************************************************************
+ *
+ */
 size_t CStream::writable_size() const
 {
     size_t amount = 0;
@@ -750,13 +766,18 @@ size_t CStream::writable_size() const
     return amount * mFrameSize;
 }
 
+/********************************************************************************
+ *
+ */
 const pa_sample_spec * CStream::get_sample_spec()
 {
     setup_alsa(true);
     return &mSpec;
 }
-
-pa_stream_state_t CStream::toPaState(InternalState state) 
+/********************************************************************************
+ *
+ */
+pa_stream_state_t CStream::toPaState(InternalState state)
 {
     switch(state) {
         case UNCONNECTED:
@@ -774,6 +795,9 @@ pa_stream_state_t CStream::toPaState(InternalState state)
 
 
 
+/********************************************************************************
+ *
+ */
 void CStream::set_state(InternalState newState)
 {
     if(newState != mState)
@@ -788,6 +812,10 @@ void CStream::set_state(InternalState newState)
 }
 
 unsigned long soFar = 0;
+
+/********************************************************************************
+ *
+ */
 int CStream::get_time(pa_usec_t * r_usec)
 {
     if(mState == RUNNING) {
@@ -799,6 +827,9 @@ int CStream::get_time(pa_usec_t * r_usec)
     return 0;
 }
 
+/********************************************************************************
+ *
+ */
 int CStream::write(const void * data, size_t nbytes, pa_free_cb_t free_cb, off_t offset, pa_seek_mode_t seek)
 {
     const snd_pcm_uframes_t frames = nbytes / mFrameSize;
@@ -812,7 +843,14 @@ int CStream::write(const void * data, size_t nbytes, pa_free_cb_t free_cb, off_t
         mState = RUNNING;
     }
     if(mAlsaHnd) {
-        snd_pcm_writei(mAlsaHnd, data, frames);
+        snd_pcm_sframes_t written = snd_pcm_writei(mAlsaHnd, data, frames);
+        if(written != static_cast<snd_pcm_sframes_t>(frames)) {
+            if(written < 0) {
+                DEBUG_MSG("-- snd_pcm_writei returned error %li", written);
+            } else {
+                DEBUG_MSG("-- snd_pcm_writei only wrote %lu bytes", written * mFrameSize);
+            }
+        }
     }
     if(free_cb) {
         free_cb(const_cast<void *>(data));
@@ -826,7 +864,7 @@ void CStream::AlsaCallback(snd_async_handler_t * ahnd)
     if(self->mWrite_cb) {
         const unsigned int avail = self->mFrameSize * snd_pcm_avail_update(self->mAlsaHnd);
         if(avail > 0) {
-            DEBUG_MSG("Queuing a set write callback(%u)", avail);
+            DEBUG_MSG("-- Queuing a set write callback(%u)", avail);
             //self->mContext->mainloop_once(new CStreamRequestCb(self->mWrite_cb, self->to_pa(), avail, self->mWrite_userdata));
             self->mWrite_cb(self->to_pa(), avail, self->mWrite_userdata);
         }

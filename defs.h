@@ -47,7 +47,7 @@ typedef const pa_sample_spec * (*FP_stream_get_sample_spec)(pa_stream *);
 typedef pa_stream_state_t (*FP_stream_get_state)(const pa_stream *);
 typedef int (*FP_stream_get_time)(pa_stream *, pa_usec_t *);
 typedef pa_stream * (*FP_stream_new)(pa_context *, const char *, const pa_sample_spec *, const pa_channel_map *);
-const typedef int (*FP_stream_peek)(pa_stream *, const void **, size_t *);
+typedef int (*FP_stream_peek)(pa_stream *, const void **, size_t *);
 typedef void (*FP_stream_set_state_callback)(pa_stream *, pa_stream_notify_cb_t, void *);
 typedef void (*FP_stream_set_write_callback)(pa_stream *, pa_stream_request_cb_t, void *);
 typedef void (*FP_stream_unref)(pa_stream *);
