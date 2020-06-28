@@ -1,7 +1,7 @@
 ###
 # Copyright (c) 2017 Peter Leese
 #
-# Licensed under the GPL License. See LICENSE file in the project root for full license information.  
+# Licensed under the GPL License. See LICENSE file in the project root for full license information.
 ##
 
 CFLAGS=-fpic -Wall -O3 -Wextra
@@ -42,4 +42,4 @@ fake_pulse.so : $(OBJS)
 	@$(RM) $*.d
 	@mv $*.P $*.d
 
--include $(OBJS:.o=.d) 
+-include $(OBJS:.o=.d)

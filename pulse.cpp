@@ -2,7 +2,7 @@
  *
  * copyright (c) 2017 peter leese
  *
- * licensed under the gpl license. see license file in the project root for full license information.  
+ * licensed under the gpl license. see license file in the project root for full license information.
  */
 
 #include <stdlib.h>
@@ -21,7 +21,7 @@
 
 void init_symbols(void);
 
-#define GET_ORIGINAL(name) FP_##name orig = zz_##name
+#define GET_ORIGINAL(name) FP_##name orig = zz_##name; if(orig == NULL) { init_symbols(); orig = zz_##name; }
 
 
 #ifdef INCLUDE_SIMPLE_THREADED_MAINLOOP
@@ -41,7 +41,10 @@ static bool TraceStream = true;
 static bool TraceUtilities = true;
 static bool TraceOperation = false;
 
-/*----------------------------------------------------------------------------*/
+
+/**
+ * Read env variable(s) to determine setting to use when faking pulse
+ */
 void init_fake_options()
 {
     char options[] = "0000000000";
@@ -54,7 +57,7 @@ void init_fake_options()
         TraceStream = (options[3] != '0');
         TraceUtilities = (options[4] != '0');
         TraceOperation = (options[5] != '0');
-        
+
 #ifdef INCLUDE_SIMPLE_THREADED_MAINLOOP
         UseRealThreadedMainloop = (options[6] != '0');
 #endif
@@ -64,7 +67,10 @@ void init_fake_options()
     }
 }
 
-/*----------------------------------------------------------------------------*/
+
+/**
+ * Our version of the Pulse audio function of the same name
+ */
 const char * pa_get_library_version(void)
 {
     const char * retVal;
@@ -80,7 +86,10 @@ const char * pa_get_library_version(void)
     return retVal;
 }
 
-/*---------------------------------------------------------------------------*/
+
+/**
+ * Our version of the Pulse audio function of the same name
+ */
 int pa_channel_map_can_balance(const pa_channel_map * p)
 {
     int retVal;
@@ -97,7 +106,10 @@ int pa_channel_map_can_balance(const pa_channel_map * p)
     return retVal;
 }
 
-/*----------------------------------------------------------------------------*/
+
+/**
+ * Our version of the Pulse audio function of the same name
+ */
 pa_channel_map * pa_channel_map_init(pa_channel_map * p)
 {
     pa_channel_map * retVal;
@@ -118,7 +130,10 @@ pa_channel_map * pa_channel_map_init(pa_channel_map * p)
     return retVal;
 }
 
-/*----------------------------------------------------------------------------*/
+
+/**
+ * Our version of the Pulse audio function of the same name
+ */
 pa_channel_map * pa_channel_map_init_auto(pa_channel_map * p, unsigned channels, pa_channel_map_def_t def)
 {
     pa_channel_map * retVal;
@@ -143,7 +158,9 @@ pa_channel_map * pa_channel_map_init_auto(pa_channel_map * p, unsigned channels,
 }
 
 
-/*----------------------------------------------------------------------------*/
+/**
+ * Our version of the Pulse audio function of the same name
+ */
 int pa_context_connect(pa_context * c, const char * server,
         pa_context_flags_t flags, const pa_spawn_api * api)
 {
@@ -175,7 +192,10 @@ int pa_context_connect(pa_context * c, const char * server,
     return retVal;
 }
 
-/*----------------------------------------------------------------------------*/
+
+/**
+ * Our version of the Pulse audio function of the same name
+ */
 void pa_context_disconnect(pa_context * c)
 {
     if(TraceContext) {
@@ -189,12 +209,12 @@ void pa_context_disconnect(pa_context * c)
     }
 }
 
-/*----------------------------------------------------------------------------*/
+
 /**
- * Intercept the callback! 
+ * Intercept the callback!
  */
 static pa_context_notify_cb_t context_drain_cb_func;
-    
+
 static void context_drain_cb(pa_context * c, void * userdata)
 {
     DEBUG_MSG("%s called ", __func__);
@@ -222,7 +242,7 @@ pa_operation * pa_context_drain(pa_context * c, pa_context_notify_cb_t cb, void 
 
 /*----------------------------------------------------------------------------*/
 /**
- * Intercept the callback! 
+ * Intercept the callback!
  */
 
 static pa_server_info_cb_t context_get_server_info_cb_func;
@@ -256,7 +276,7 @@ pa_operation * pa_context_get_server_info(pa_context *c, pa_server_info_cb_t cb,
 
 /*----------------------------------------------------------------------------*/
 /**
- * Intercept the callback! 
+ * Intercept the callback!
  */
 
 static pa_sink_info_cb_t context_get_sink_info_by_name_cb_func;
@@ -290,7 +310,7 @@ pa_operation * pa_context_get_sink_info_by_name(pa_context * c,
 
 /*----------------------------------------------------------------------------*/
 /**
- * Intercept the callback! 
+ * Intercept the callback!
  */
 
 static pa_sink_info_cb_t context_get_sink_info_list_cb_func;
@@ -420,7 +440,7 @@ pa_context * pa_context_new(pa_mainloop_api * mainloop, const char * name)
 
 /*----------------------------------------------------------------------------*/
 /**
- * Intercept the callback! 
+ * Intercept the callback!
  */
 static pa_time_event_cb_t time_event_cb_func;
 
@@ -452,7 +472,7 @@ extern "C" pa_time_event * pa_context_rttime_new(const pa_context * c,
 
 /*----------------------------------------------------------------------------*/
 /**
- * Intercept the callback! 
+ * Intercept the callback!
  */
 static pa_context_success_cb_t context_sink_input_volume_cb_func;
 
@@ -484,7 +504,7 @@ pa_operation * pa_context_set_sink_input_volume(pa_context * c,
 
 /*----------------------------------------------------------------------------*/
 /**
- * Intercept the callback! 
+ * Intercept the callback!
  */
 
 static pa_context_notify_cb_t context_state_cb_func;
@@ -725,7 +745,7 @@ int pa_stream_connect_playback(pa_stream * s,
 
 /*----------------------------------------------------------------------------*/
 /**
- * Intercept the callback! 
+ * Intercept the callback!
  */
 static pa_stream_success_cb_t stream_cork_cb_func = NULL;
 
@@ -910,7 +930,7 @@ int pa_stream_peek(pa_stream * p, const void ** data, size_t * nbytes)
 
 /*----------------------------------------------------------------------------*/
 /**
- * Intercept the callback! 
+ * Intercept the callback!
  */
 
 static pa_stream_notify_cb_t stream_state_cb_func;
@@ -940,7 +960,7 @@ void pa_stream_set_state_callback(pa_stream * s, pa_stream_notify_cb_t cb, void 
 
 /*----------------------------------------------------------------------------*/
 /**
- * Intercept the callback! 
+ * Intercept the callback!
  */
 static pa_stream_request_cb_t stream_write_cb_func;
 
@@ -985,7 +1005,7 @@ void pa_stream_unref(pa_stream * s)
 
 /*----------------------------------------------------------------------------*/
 /**
- * Intercept the callback! 
+ * Intercept the callback!
  */
 static pa_stream_success_cb_t stream_update_timing_cb_func;
 
@@ -1016,7 +1036,7 @@ pa_operation * pa_stream_update_timing_info(pa_stream * p, pa_stream_success_cb_
 
 /*----------------------------------------------------------------------------*/
 /**
- * Intercept the callback! 
+ * Intercept the callback!
  */
 
 static pa_free_cb_t write_free_cb_func;
@@ -1027,6 +1047,10 @@ static void write_free_cb(void * data)
     write_free_cb_func(data);
 }
 
+
+/**
+ * Our version of the Pulse audio function of the same name
+ */
 int pa_stream_write(pa_stream * p,
         const void * data, size_t nbytes, pa_free_cb_t free_cb, off_t offset, pa_seek_mode_t seek)
 {
@@ -1047,13 +1071,15 @@ int pa_stream_write(pa_stream * p,
     return retVal;
 }
 
-/*----------------------------------------------------------------------------*/
 
+/**
+ * Our version of the Pulse audio function of the same name
+ */
 pa_volume_t pa_sw_volume_from_linear(double v)
 {
     pa_volume_t retVal;
     if(TraceUtilities) {
-        DEBUG_MSG("%s called ", __func__);
+        DEBUG_MSG("%s(%lf) called ", __func__, v);
     }
     if(UseRealUtilities) {
         GET_ORIGINAL(sw_volume_from_linear);
@@ -1065,7 +1091,9 @@ pa_volume_t pa_sw_volume_from_linear(double v)
     return retVal;
 }
 
-/*----------------------------------------------------------------------------*/
+/**
+ * Our version of the Pulse audio function of the same name
+ */
 void pa_threaded_mainloop_free(pa_threaded_mainloop* m)
 {
     if(TraceThreadedMainLoop) {
@@ -1091,7 +1119,7 @@ static pa_io_event* io_new_shim(pa_mainloop_api*a, int fd, pa_io_event_flags_t e
     (void) a;
     return pa_mainloop_api_real->io_new(pa_mainloop_api_real, fd, events, cb, userdata);
 }
-    
+
 static void io_enable_shim(pa_io_event* e, pa_io_event_flags_t events)
 {
     DEBUG_MSG("%s called ", __func__);
@@ -1105,7 +1133,7 @@ static void io_free_shim(pa_io_event* e)
 }
 
 static void io_set_destroy_shim(pa_io_event *e, pa_io_event_destroy_cb_t cb)
-{    
+{
     DEBUG_MSG("%s called ", __func__);
     pa_mainloop_api_real->io_set_destroy(e, cb);
 }
@@ -1116,7 +1144,7 @@ static pa_time_event* time_new_shim(pa_mainloop_api*a, const struct timeval *tv,
     (void) a;
     return pa_mainloop_api_real->time_new(pa_mainloop_api_real, tv, cb, userdata);
 }
-    
+
 static void time_restart_shim(pa_time_event* e, const struct timeval *tv)
 {
     DEBUG_MSG("%s called ", __func__);
@@ -1147,7 +1175,7 @@ static void defer_enable_shim(pa_defer_event* e, int b)
     DEBUG_MSG("%s called ", __func__);
     pa_mainloop_api_real->defer_enable(e, b);
 }
-    
+
 static void defer_free_shim(pa_defer_event* e)
 {
     DEBUG_MSG("%s called ", __func__);
@@ -1360,7 +1388,7 @@ size_t pa_usec_to_bytes(pa_usec_t t, const pa_sample_spec *spec)
 
 /*----------------------------------------------------------------------------*/
 /**
- * Intercept the callback! 
+ * Intercept the callback!
  */
 static pa_stream_request_cb_t stream_read_cb_func;
 
@@ -1489,7 +1517,7 @@ extern "C" const char * pa_stream_get_device_name(const pa_stream * s)
 
 /*----------------------------------------------------------------------------*/
 /**
- * Intercept the callback! 
+ * Intercept the callback!
  */
 
 static pa_context_subscribe_cb_t subscribe_event_cb_func;
@@ -1519,7 +1547,7 @@ void pa_context_set_subscribe_callback(pa_context * c, pa_context_subscribe_cb_t
 
 /*----------------------------------------------------------------------------*/
 /**
- * Intercept the callback! 
+ * Intercept the callback!
  */
 static pa_context_success_cb_t context_subscribe_cb_func;
 
@@ -1553,7 +1581,7 @@ pa_operation * pa_context_subscribe(pa_context * c,
 
 /*----------------------------------------------------------------------------*/
 /**
- * Intercept the callback! 
+ * Intercept the callback!
  */
 
 void (*callback_func)(pa_mainloop_api*, void *);

@@ -2,7 +2,7 @@
  *
  * Copyright (c) 2017 Peter Leese
  *
- * Licensed under the GPL License. See LICENSE file in the project root for full license information.  
+ * Licensed under the GPL License. See LICENSE file in the project root for full license information.
  */
 
 #ifndef _GNU_SOURCE
@@ -22,27 +22,81 @@ extern "C" void * __libc_dlsym(void *, const char *);
 extern "C" void * _dl_sym(void *, const char *, void *);
 
 static void * libPulseHandle = NULL;
+static void * (*theRealDlopen)(const char * filename, int flags) = NULL;
+static void * (*theRealDlsym)(void * handle, const char *symbol) = NULL;
+static int (*theRealDlclose)(void * handle) = NULL;
 
 #define MAGIC_HND (void *)(0x1865FE45)
 
 /**
- * Intercept the call to dlopen() 
+ * Set the global variable that holds the address of the real version of
+ * dlopen(). Return non-zero on success
+ */
+static int set_real_dlopen()
+{
+    void * (*func)(const char * filename, int flags)
+                = reinterpret_cast<void *(*)(const char *, int)>(dlsym(RTLD_NEXT, "dlopen"));
+    if(func == NULL) {
+        DEBUG_MSG("Failed to find dlopen()");
+        return 0;
+    }
+
+    theRealDlopen = func;
+    return 1;
+}
+
+
+/**
+ * Set the global variable that holds the address of the real version of
+ * dlsym(). Return non-zero on success
+ */
+static int set_real_dlsym()
+{
+    void * (*func)(void * handle, const char *symbol)
+                = reinterpret_cast<void *(*)(void *, const char *)>(
+                    _dl_sym(RTLD_NEXT, "dlsym", reinterpret_cast<void *>(dlsym)));
+    if(func == NULL) {
+        DEBUG_MSG("Failed to find dlsym()");
+        return 0;
+    }
+
+    theRealDlsym = func;
+    return 1;
+}
+
+
+/**
+ * Set the global variable that holds the address of the real version of
+ * dlclose(). Return non-zero on success
+ */
+static int set_real_dlclose()
+{
+    int (*func)(void * handle) = reinterpret_cast<int(*)(void *)>(dlsym(RTLD_NEXT, "dlclose"));
+    if(func == NULL) {
+        DEBUG_MSG("Failed to find dlclose()");
+        return 0;
+    }
+
+    theRealDlclose = func;
+    return 1;
+}
+
+
+/**
+ * Intercept the call to dlopen(), this is called by the application, we are checking
+ * for the application trying to open libpulse.so
  *
  * If the caller is opening the libpulse.so, return a fake handle
  */
 void * dlopen(const char * filename, int flags)
 {
-    static void * (*the_real_dlopen)(const char * filename, int flags) = NULL;
-
-    if(the_real_dlopen == NULL) {
-        the_real_dlopen = reinterpret_cast<void *(*)(const char *, int)>(dlsym(RTLD_NEXT, "dlopen"));
-        if(the_real_dlopen == NULL) {
-            DEBUG_MSG("Failed to find dlopen()");
+    if(theRealDlopen == NULL) {
+        if(!set_real_dlopen()) {
             return NULL;
         }
     }
 
-    void * handle = the_real_dlopen(filename, flags);
+    void * handle = theRealDlopen(filename, flags);
 
     if(filename && (strncmp("libpulse.so", filename, 11) == 0)) {
         DEBUG_MSG("dlopen(%s) called", filename);
@@ -52,6 +106,10 @@ void * dlopen(const char * filename, int flags)
     return handle;
 }
 
+
+/**
+ * Dummy function used when we have yet to implement our version of the PA function to be faked
+ */
 int pa_dummy()
 {
     DEBUG_MSG("pa_dummy called\n");
@@ -59,19 +117,18 @@ int pa_dummy()
 }
 
 /**
- * Intercept the call to dlsym()
+ * Intercept the call to dlsym(), this is called by the application, we are checking
+ * when it tries to get a symbole for a PA function.
+ *
+ * If the PA function is requested return address of our version
  *
  */
 void * dlsym(void * handle, const char * symbol)
 {
     void * address = NULL;
-    static void * (*the_real_dlsym)(void * handle, const char *symbol) = NULL;
 
-    if(the_real_dlsym == NULL) {
-        the_real_dlsym = reinterpret_cast<void *(*)(void *, const char *)>(
-                    _dl_sym(RTLD_NEXT, "dlsym", reinterpret_cast<void *>(dlsym)));
-        if(the_real_dlsym == NULL) {
-            DEBUG_MSG("Failed to find dlsym()");
+    if(theRealDlsym == NULL) {
+        if(!set_real_dlsym()) {
             return NULL;
         }
     }
@@ -81,34 +138,15 @@ void * dlsym(void * handle, const char * symbol)
         address = reinterpret_cast<void *>(dlsym);
 
     } else if(handle == MAGIC_HND) {
-        // Symbol from libpulse?
+        // Symbol from libpulse? return address of our implementation
 
-        address = the_real_dlsym(libPulseHandle, symbol);
-//        DEBUG_MSG("dlsym(%s) called", symbol);
-
-        if(address) {
-            char buf[100];
-            strcpy(buf, symbol);
-            buf[0] = 'z';
-            buf[1] = 'z';
-            // Get the function pointer to store away address of real function.
-            void ** pSaveAddress = reinterpret_cast<void **>(the_real_dlsym(RTLD_DEFAULT, buf));
-            if(pSaveAddress) {
-                *pSaveAddress = address;
-            } else {
-                DEBUG_MSG("WARNING: Save Symbol %s missing", buf);
-            }
-        } else {
-            DEBUG_MSG("The real version of libpulse does not support %s", symbol);
-        }
-
-        address = the_real_dlsym(RTLD_DEFAULT, symbol);
+        address = theRealDlsym(RTLD_DEFAULT, symbol);
         if(address == NULL) {
             address = reinterpret_cast<void *>(pa_dummy);
             DEBUG_MSG("WARNING: Shim function  %s missing", symbol);
         }
     } else {
-        address = the_real_dlsym(handle, symbol);
+        address = theRealDlsym(handle, symbol);
     }
     return address;
 
@@ -119,12 +157,8 @@ void * dlsym(void * handle, const char * symbol)
  */
 int dlclose(void * handle)
 {
-    static int (*the_real_dlclose)(void * handle) = NULL;
-    
-    if(the_real_dlclose == NULL) {
-        the_real_dlclose = reinterpret_cast<int(*)(void *)>(dlsym(RTLD_NEXT, "dlclose"));
-        if(the_real_dlclose == NULL) {
-            DEBUG_MSG("Failed to find dlclose()");
+    if(theRealDlclose == NULL) {
+        if(!set_real_dlclose()) {
             return 0;
         }
     }
@@ -132,20 +166,45 @@ int dlclose(void * handle)
     if(handle == MAGIC_HND) {
         DEBUG_MSG("dlclose called");
         handle = libPulseHandle;
-    } 
-    return the_real_dlclose(handle);
+    }
+    return theRealDlclose(handle);
 }
 
-#define LOAD_SYM(name) dlsym(handle, "zz_" #name)
+/**
+ * Get the real PA function address
+ */
+static void * load_pulse_sym(void * handle, const char * symbol)
+{
+    void * address =  theRealDlsym(handle, symbol);
+    if(address == NULL) {
+        DEBUG_MSG("The real version of libpulse does not support %s", symbol);
+    }
+    return address;
+}
+
+#define LOAD_SYM(name) zz_##name = reinterpret_cast<FP_##name>(load_pulse_sym(handle, "pa_" # name))
 
 /**
- * Get pulse symbols for the case when pulse has linked dynamically
- * (as opposed to opened with dlopen)
+ * Get real pulse symbols for the case when we need to call pulse
  */
 void init_symbols(void)
 {
     if(zz_get_library_version == NULL) {
-        void * handle = dlopen("libpulse.so", RTLD_LAZY);
+        if(theRealDlopen == NULL) {
+            if(!set_real_dlopen()) {
+                return;
+            }
+        }
+
+        if(theRealDlsym == NULL) {
+            if(!set_real_dlsym()) {
+                return;
+            }
+        }
+
+        DEBUG_MSG("Loading PA symbols from real library");
+
+        void * handle = theRealDlopen("libpulse.so", RTLD_LAZY);
 
 	LOAD_SYM(get_library_version);
 	LOAD_SYM(channel_map_can_balance);
@@ -209,6 +268,12 @@ void init_symbols(void)
 	LOAD_SYM(context_set_subscribe_callback);
 	LOAD_SYM(context_subscribe);
 	LOAD_SYM(mainloop_api_once);
-        dlclose(handle);
+
+        if(theRealDlclose == NULL) {
+            if(!set_real_dlclose()) {
+                return;
+            }
+        }
+        theRealDlclose(handle);
     }
 }
